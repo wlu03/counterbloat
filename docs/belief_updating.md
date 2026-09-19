@@ -106,7 +106,9 @@ A calculation names the output that measures the quantity the claim states and t
 claim states for it. Code compares the two to the precision of the number as written in the
 claim and stores
 `claim_relation`: `agrees`, `disagrees`, or `none`. The expected value must be a number written
-in the claim. A verdict of `supported` or `contradicted` needs comparable evidence about the
+in the claim. When the result and the stated value have the same size and opposite signs, the
+sign convention is unknown and the relation is `none`. A percentage change or reduction whose
+base period is later than its comparison period is rejected before it is recorded. A verdict of `supported` or `contradicted` needs comparable evidence about the
 claim in that direction, or a calculation whose relation is `agrees` or `disagrees`. A
 calculation that answers a side question has relation `none` and cannot justify a verdict.
 
@@ -122,6 +124,11 @@ written.
 `backend/evidence/provenance.py` keeps a version and a history on every group. A withdrawal or a
 correction removes the item from the active ledger, keeps it in `state.withdrawn`, raises the
 group version, and removes every calculation that read its inputs from a group that is no longer
-active. A merge joins two groups and raises the version of the group that is kept. A score
+active or that cites the removed passage when no admitted item cites it any more. A question
+whose answer rested only on the removed item is open again. A merge joins two groups and raises the version of the group that is kept. A score
 applies to one group version, so after any of these the group is scored again. A repetition that
 arrives before its original is grouped alone at first and joined to the original when it arrives.
+Passages with identical text are joined into one group in every order of arrival, also when
+only one of them was declared a repetition. One limit remains: when a passage is evidence for
+two targets under different quotes, a repetition of that passage joins the group of whichever
+quote was admitted first.

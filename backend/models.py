@@ -251,7 +251,6 @@ class NumericBelief(BaseModel):
     raw_probability: float | None = None
     calibrated_probability: float | None = None
     calibration_status: str = "uncalibrated"
-    artifact_version: str | None = None
     contributions: list[EvidenceScore] = []
 
 

@@ -22,7 +22,11 @@ the historical cutoff, label isolation, and the null public probability.
         --out results/replay_emissions.json
 
 The default provider is scripted: the status follows a fixed rule and the scores are the ones
-saved in the trace. It checks ordering, duplicates, irrelevant additions, corrections, and
+saved in the trace. A saved score applies only to the source groups, relations, and calculations
+it was recorded for. In any other context the scripted provider abstains, and the abstention is
+listed in the run's errors. Every question starts open, and a saved answer is applied once the
+evidence it cites has been admitted. A run in which a provider call failed or was refused by
+the budget is marked incomplete and is reported as not run. It checks ordering, duplicates, irrelevant additions, corrections, and
 withdrawals without any paid call. The seed (default 7) is written to the result.
 
 To replay a stored investigation, export it first:

@@ -92,7 +92,6 @@ class FakeLLM:
 
     def update_state(self, state, new_evidence_ids, new_calculation_ids):
         # The verdict depends on the verified calculations in the state it is given.
-        self.seen_calculations = [c.model_copy(deep=True) for c in state.calculations]
         tested = [c for c in state.calculations if c.claim_relation == "disagrees"]
         if not tested:
             return StateUpdate(status=EvidenceStatus.insufficient, mechanisms=[], summary="",
