@@ -38,6 +38,7 @@ def test_preparation_keeps_labels_out_of_the_runtime_file(tmp_path):
     assert record["rows"] == 1 and record["revision"] == "rev-1" and record["license"] == "CC BY-NC 4.0"
     assert "label" in record["field_mapping"]["evaluation_only"]
     assert "label" not in record["field_mapping"]["model_visible"]
+    assert manifest.name == "dev.manifest.json"  # a second split does not overwrite this one
 
 
 def _settings(updater):
@@ -59,6 +60,7 @@ def test_the_pipeline_runs_without_the_gold_file_and_is_scored_afterwards(tmp_pa
 
     [baseline], [pipeline] = system("A1"), system("A2")
     assert baseline["status"] == "insufficient" and baseline["score"] is None
+    assert baseline["embedding_search"] is False and pipeline["target"] == "averitec-refuted"
     assert pipeline["status"] == "contradicted" and 0.5 < pipeline["score"] < 1
     assert pipeline["embedding_search"] is False  # the run states that no vector search took place
 
@@ -81,10 +83,12 @@ def test_the_internal_score_is_for_the_dataset_target_in_a_dataset_run():
 def test_examples_past_the_call_budget_are_not_scored():
     rows = [{"id": i, "text": CLAIM} for i in range(3)]
     predictions = list(run_rows(rows, detect, FakeLLM, max_calls=2))
-    assert [p["status"] for p in predictions] == ["ran", "not_run", "not_run"]
-    gold = [{"id": i, "label": 1} for i in range(3)]
+    # The second example uses the last allowed call and no call of it was refused, so it counts.
+    assert [p["status"] for p in predictions] == ["ran", "ran", "not_run"]
+    gold = [{"id": 0, "label": 1}, {"id": 1, "label": None}, {"id": 2, "label": 1}]
     result = score(predictions, gold, None)
     assert result["examples"] == 3 and result["scored"] == 1
+    assert result["gold_rows_without_a_usable_label"] == 1
     assert result["precision"] == 1.0 and result["recall"] == 1.0
 
 
@@ -95,3 +99,28 @@ def test_cost_is_a_number_only_when_every_model_has_a_price():
     gold = [{"id": 1, "label": 1}]
     assert score([prediction], gold, None, {"m": [0.01, 0.001, 0.1]})["cost"] == pytest.approx(2.05)
     assert score([prediction], gold, None, {"other": [1, 1, 1]})["cost"] == "unknown"
+    routed = {**prediction, "calls": {"openai:extract": 1, "jev:route": 1}}
+    assert score([routed], gold, None, {"m": [0.01, 0.001, 0.1]})["cost"] == "unknown"
+
+
+def test_a_provider_failure_in_the_pipeline_is_not_scored_as_a_prediction(tmp_path, monkeypatch):
+    from backend.providers.base import ProviderError
+
+    class Broken(FakeLLM):
+        def analyze_evidence(self, claim, questions, context):
+            raise ProviderError("openai analyze failed: 500")
+
+    monkeypatch.setenv("OBJECT_STORE_DIR", str(tmp_path / "objects"))
+    sources = {"x": [{"example_id": "x", "content": REPORT.decode(), "media_type": "text/html"}]}
+    [prediction] = run_rows([{"id": "x", "claim": CLAIM}], lambda row, factory: verify(
+        row, factory, sources, TASK, "A2", _settings("linguistic")), Broken, max_calls=50)
+    assert prediction["status"] == "not_run" and prediction["errors"] == 1
+    assert score([prediction], [{"id": "x", "label": "Refuted"}], TASK)["scored"] == 0
+
+
+def test_a_saturated_score_does_not_break_the_log_likelihood():
+    prediction = {"id": 1, "status": "contradicted", "score": 1.0, "target": "averitec-refuted",
+                  "calls": {}, "failed_calls": 0, "latency_ms": 0, "skipped_by_router": 0,
+                  "compression_fallbacks": 0, "tokens_by_model": {}}
+    result = score([prediction], [{"id": 1, "label": "Refuted"}], TASK)
+    assert result["nll"] == pytest.approx(0, abs=1e-9) and result["target"] == ["averitec-refuted"]

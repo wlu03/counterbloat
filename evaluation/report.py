@@ -21,12 +21,18 @@ def _replay(name: str, result: dict) -> list[str]:
              f"Source: {result['source']} This is a {kind}. Provider: {result['provider']}. "
              f"Seed {result['seed']}, {result['permutations']} permutations, prior "
              f"{result['prior']}, tempering {result['tempering']}, commit {result['commit']}, "
-             f"{result['paid_calls_used']} paid calls.", "",
+             f"{result['paid_calls_used']} of at most {result['max_paid_calls']} paid calls. "
+             f"Scores are for the target {result['target']['id']}: "
+             f"{result['target']['hypothesis']}", "",
              "| strategy | final status | raw score | order changes status | score range over "
              "orders | duplicate source | irrelevant addition | withdrawal | correction |",
              "|---|---|---|---|---|---|---|---|---|"]
     for strategy, outcome in result["strategies"].items():
         base, compared = outcome["runs"]["base"], outcome["comparison"]
+        if not base["complete"]:
+            # A provider call failed or the paid-call budget was used up during the base run.
+            lines.append(f"| {strategy} | " + " | ".join(["not run"] * 8) + " |")
+            continue
         cells = [strategy, base["final_status"], _show(base["final_score"]),
                  _show(compared["order_changes_status"]), _show(compared["order_score_range"])]
         for variant in ("duplicate_source", "irrelevant_addition", "withdrawal", "correction"):

@@ -74,8 +74,8 @@ def run_rows(rows: Iterable[dict], one: Callable[[dict, Callable], dict], make_l
             continue
         prediction = one(row, factory)
         left -= sum(llm.calls for llm in made)
-        if left <= 0:
-            # The budget ran out during this example, so some of its calls may have been refused.
+        if any(llm.refused for llm in made):
+            # A call was refused during this example, so its result is not a prediction.
             prediction["status"] = "not_run"
         yield prediction
 
@@ -118,6 +118,7 @@ def verify(row: dict, llm_factory: Callable, searchable: dict[str, list[dict]],
         except ProviderError as exc:
             manifest.errors.append(str(exc))
             status = "not_run"
+        manifest.embedding_search = getattr(index, "used_embeddings", None)
     else:
         store.put("analyses", "run", {"id": "run", "document_id": document.id,
                                       "status": "queued"}, document_id=document.id)
@@ -126,10 +127,17 @@ def verify(row: dict, llm_factory: Callable, searchable: dict[str, list[dict]],
         findings = store.find("findings", Finding, analysis_id="run")
         states = store.find("states", InvestigationState, analysis_id="run")
         status = findings[0].evidence_status if findings else "no_claim_extracted"
-        if states and states[0].belief:
+        failed = store.get("analyses", "run")["status"] == "failed" or (
+            not findings and manifest.errors) or any(
+            s.stop_reason == "provider_error" for s in states)
+        if failed:
+            status = "not_run"  # a provider failure is not a prediction
+        elif states and states[0].belief:
             score = states[0].belief.raw_probability
+    target = task.target(Claim(id="", document_id="", span_id="", text="", start=0, end=0,
+                               assertion_type=AssertionType.reported_achievement), None)
     return {"id": row["id"], "system": system, "updater": deps.settings.assessment.updater,
-            "status": status, "score": score, **_usage(manifest)}
+            "status": status, "score": score, "target": target.id, **_usage(manifest)}
 
 
 def _cost(predictions: list[dict], prices: dict[str, list[float]] | None) -> float | str:
@@ -137,16 +145,21 @@ def _cost(predictions: list[dict], prices: dict[str, list[float]] | None) -> flo
     for p in predictions:
         for model, counts in p["tokens_by_model"].items():
             used[model] = [a + b for a, b in zip(used.get(model, [0, 0, 0]), counts)]
-    if prices is None or set(used) - set(prices):
-        return "unknown"  # a price is missing, so no figure is given
+    providers = {key.split(":")[0] for p in predictions for key in p["calls"]}
+    if prices is None or set(used) - set(prices) or providers - {"openai"}:
+        # A model price is missing, or Jev or Token Company usage has no price here. A figure
+        # for the OpenAI part alone would make routing and compression look cheaper than they are.
+        return "unknown"
     return sum(n * rate for model, counts in used.items() for n, rate in zip(counts, prices[model]))
 
 
 def score(predictions: list[dict], gold: list[dict], task: VerificationTask | None,
           prices: dict[str, list[float]] | None = None) -> dict:
-    labels = {str(g["id"]): g["label"] for g in gold}
+    usable = (lambda label: label in task.status_of) if task else (lambda label: label is not None)
+    labels = {str(g["id"]): g["label"] for g in gold if usable(g["label"])}
     ran = [p for p in predictions if str(p["id"]) in labels and p["status"] != "not_run"]
     result = {"examples": len(predictions), "scored": len(ran),
+              "gold_rows_without_a_usable_label": len(gold) - len(labels),
               "cost": _cost(predictions, prices),
               "calls": dict(sum((Counter(p["calls"]) for p in predictions), Counter())),
               "failed_calls": sum(p["failed_calls"] for p in predictions),
@@ -157,12 +170,15 @@ def score(predictions: list[dict], gold: list[dict], task: VerificationTask | No
         precision, recall = precision_recall([p["predicted"] for p in ran],
                                              [bool(labels[str(p["id"])]) for p in ran])
         return {**result, "precision": precision, "recall": recall}
-    expected = [task.status_of.get(labels[str(p["id"])]) for p in ran]
+    targets = {p.get("target") for p in ran}
+    result["target"] = sorted(map(str, targets))
+    expected = [task.status_of[labels[str(p["id"])]] for p in ran]
     result["status_agreement"] = (sum(p["status"] == e for p, e in zip(ran, expected)) / len(ran)
                                   if ran else None)
     result["confusion"] = dict(Counter(f"{e} -> {p['status']}" for p, e in zip(ran, expected)))
+    # Scores for different targets are not comparable, so they are not pooled.
     scored = [(p["score"], int(labels[str(p["id"])] == task.positive)) for p in ran
-              if p["score"] is not None]
+              if p["score"] is not None and len(targets) == 1]
     # Score metrics cover only the examples that have a score. Without any, they do not exist.
     result["with_score"] = len(scored)
     values, outcomes = [s for s, _ in scored], [y for _, y in scored]
@@ -187,12 +203,17 @@ def main() -> None:
     parser.add_argument("--out", required=True)
     parser.add_argument("--dataset", choices=sorted(VERIFICATION))
     parser.add_argument("--system", choices=["A1", *ABLATIONS], default="A2")
-    parser.add_argument("--updater", default=None)
+    parser.add_argument("--updater", choices=["linguistic", "full_context", "evidence_accumulator"])
     parser.add_argument("--jev", action="store_true")
     parser.add_argument("--limit", type=int, default=20)
     parser.add_argument("--max-calls", type=int, default=200)
     parser.add_argument("--prices")
     args = parser.parse_args()
+    needed = {"detect": ["visible"], "verify": ["visible", "dataset"],
+              "score": ["predictions", "gold"]}[args.command]
+    missing = [f"--{name}" for name in needed if not getattr(args, name)]
+    if missing:
+        parser.error(f"{args.command} needs {', '.join(missing)}")  # before any file is written
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     task = VERIFICATION.get(args.dataset or "")

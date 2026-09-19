@@ -40,6 +40,7 @@ def replay(trace: Trace, settings: AssessmentSettings, llm, manifest: RunManifes
     state = InvestigationState(claim=claim, questions=deepcopy(trace.questions),
                                target=strategies.new_target(claim, trace.cutoff))
     steps = []
+    complete = True
     for event in trace.events:
         new_evidence: list[str] = []
         new_calculations: list[str] = []
@@ -73,12 +74,14 @@ def replay(trace: Trace, settings: AssessmentSettings, llm, manifest: RunManifes
                 record = strategies.step(state, new_evidence, new_calculations, llm, settings,
                                          manifest, prompts.VERSION)
             except ProviderError as exc:
+                # The status and score after this point are not results of the strategy.
                 manifest.errors.append(str(exc))
-        steps.append({"event": event.kind, "id": (new_evidence + new_calculations + [event.evidence_id]
-                                                  + event.group_ids)[0],
+                complete = False
+        subject = new_evidence + new_calculations + [event.evidence_id] + event.group_ids
+        steps.append({"event": event.kind, "id": next(i for i in subject if i),
                       "updated": record is not None, "status": state.assessment.status,
                       "score": state.belief.raw_probability if state.belief else None})
-    return {"steps": steps, "final_status": state.assessment.status,
+    return {"complete": complete, "steps": steps, "final_status": state.assessment.status,
             "final_score": steps[-1]["score"] if steps else None,
             "updates": state.version, "active_groups": sum(g.active for g in state.groups),
             "calls": len(manifest.calls),
@@ -143,7 +146,14 @@ def variants(trace: Trace, seed: int, permutations: int) -> dict[str, Trace]:
 
 
 def compare(runs: dict[str, dict]) -> dict:
-    """Differences from the base run. A score difference is None when either score is missing."""
+    """Differences from the base run. A score difference is None when either score is missing.
+
+    A run in which a provider call failed or was refused is left out. Nothing is compared when
+    the base run is one of them.
+    """
+    runs = {name: run for name, run in runs.items() if run["complete"]}
+    if "base" not in runs:
+        return {}
     base = runs["base"]
 
     def score_change(name: str) -> float | None:
@@ -174,7 +184,9 @@ def run_all(trace: Trace, names: list[str], provider: str, seed: int, permutatio
         for variant, changed in variants(trace, seed, permutations).items():
             manifest = RunManifest(analysis_id=f"replay-{trace.id}", mode=Mode.replay,
                                    config_hash="", updater=name)
-            if provider == "openai":
+            if provider == "openai" and remaining <= 0:
+                runs[variant] = {"complete": False, "steps": [], "errors": ["not run: budget used up"]}
+            elif provider == "openai":
                 from backend.providers.openai_client import OpenAILLM
                 llm = Budgeted(OpenAILLM(manifest), remaining)
                 runs[variant] = replay(changed, settings, llm, manifest)
@@ -183,7 +195,9 @@ def run_all(trace: Trace, names: list[str], provider: str, seed: int, permutatio
                 runs[variant] = replay(changed, settings, ScriptedLLM(trace.scripted_scores),
                                        manifest)
         results[name] = {"runs": runs, "comparison": compare(runs)}
+    target = strategies.new_target(trace.claim, trace.cutoff)
     return {"trace": trace.id, "source": trace.source,
+            "target": {"id": target.id, "hypothesis": target.hypothesis},
             "is_synthetic_example": trace.is_synthetic_example, "provider": provider,
             "seed": seed, "permutations": permutations, "commit": current_commit(),
             "prompts": prompts.VERSION, "scorer": strategies.SCORER_VERSION, "prior": prior,
@@ -211,8 +225,9 @@ def main() -> None:
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(result, indent=2, default=str))
     for name, outcome in result["strategies"].items():
-        print(name, outcome["runs"]["base"]["final_status"], outcome["runs"]["base"]["final_score"],
-              json.dumps(outcome["comparison"], default=str))
+        base = outcome["runs"]["base"]
+        print(name, base.get("final_status") if base["complete"] else "incomplete",
+              base.get("final_score"), json.dumps(outcome["comparison"], default=str))
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ publisher under its license and pass the revision you obtained. Output:
 
   DIR/prepared/DATASET/SPLIT.visible.jsonl   what a system under test may read
   DIR/gold/DATASET/SPLIT.jsonl               labels, readable by the owner only
-  DIR/prepared/DATASET/DATASET.json          hash, row count, revision, license, field names
+  DIR/prepared/DATASET/SPLIT.manifest.json   hash, row count, revision, license, field names
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def prepare(dataset: str, source: str | Path, revision: str, split: str, out: st
     fields = {"model_visible": sorted(examples[0].model_visible),
               "evaluation_only": sorted(examples[0].evaluation_only)} if examples else {}
     return write_manifest(dataset, source, len(examples), revision, license, [split], fields,
-                          visible.parent)
+                          visible.parent, f"{split}.manifest")
 
 
 def main() -> None:

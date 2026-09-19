@@ -105,3 +105,23 @@ def test_the_report_marks_missing_scores_as_unavailable(tmp_path):
     assert "| linguistic | contradicted | unavailable |" in report
     assert "| evidence_accumulator | contradicted | 0.3333 |" in report
     assert "synthetic example" in report
+
+
+def test_a_replay_with_a_failed_provider_call_is_reported_as_not_run(tmp_path):
+    from backend.providers.base import ProviderError
+
+    class Refusing(ScriptedLLM):
+        def update_state(self, state, new_evidence_ids, new_calculation_ids):
+            raise ProviderError("call budget of 0 is used up")
+
+    trace = Trace.model_validate_json((FIXTURES / "mechanics.json").read_text())
+    result = replay(trace, AssessmentSettings(updater="linguistic"), Refusing({}), _manifest())
+    assert result["complete"] is False
+    from evaluation.replay.run import compare
+    assert compare({"base": result}) == {}
+    full = run_all(trace, ["linguistic"], "scripted", seed=7, permutations=0, max_calls=0,
+                   prior=0.2, tempering=1.0)
+    assert full["target"]["id"] == "material-overstatement-v1"
+    full["strategies"]["linguistic"]["runs"]["base"] = result
+    (tmp_path / "replay.json").write_text(json.dumps(full, default=str))
+    assert "| linguistic | not run | not run |" in build(tmp_path)

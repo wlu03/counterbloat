@@ -18,7 +18,9 @@ def brier(probabilities: list[float], labels: list[int]) -> float:
 
 
 def nll(probabilities: list[float], labels: list[int]) -> float:
-    return -sum(y * log(p) + (1 - y) * log(1 - p) for p, y in zip(probabilities, labels)) / len(labels)
+    # A sum of large log-evidence values rounds to exactly 0 or 1, where the logarithm is undefined.
+    clipped = [min(max(p, 1e-12), 1 - 1e-12) for p in probabilities]
+    return -sum(y * log(p) + (1 - y) * log(1 - p) for p, y in zip(clipped, labels)) / len(labels)
 
 
 def acceptance_rate(accepted: list[bool]) -> float:

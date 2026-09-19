@@ -3,7 +3,8 @@
 Usage: uv run --env-file .env python -m evaluation.smoke --out results/smoke.json
            [--updater evidence_accumulator] [--max-calls 25]
 
-This makes paid OpenAI calls. The run stops making calls once --max-calls is reached.
+This makes paid OpenAI calls. The run stops making calls once --max-calls is reached. The
+command exits with an error when no finding is produced or a finding has a public probability.
 """
 from __future__ import annotations
 
@@ -26,7 +27,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", required=True)
-    parser.add_argument("--updater", default="evidence_accumulator")
+    parser.add_argument("--updater", default="evidence_accumulator",
+                        choices=["linguistic", "full_context", "evidence_accumulator"])
     parser.add_argument("--max-calls", type=int, default=25)
     args = parser.parse_args()
     from backend.providers.openai_client import OpenAILLM
@@ -47,7 +49,10 @@ def main() -> None:
     run_analysis("smoke", Deps(store=store, index=index, settings=settings, llm_factory=factory))
     findings = store.find("findings", Finding, analysis_id="smoke")
     states = store.find("states", InvestigationState, analysis_id="smoke")
-    assert all(f.probability is None for f in findings), "a finding carries a public probability"
+    if not findings:
+        raise SystemExit("no finding was produced, so nothing was checked")
+    if any(f.probability is not None for f in findings):
+        raise SystemExit("a finding has a public probability")
     result = {"is_synthetic_example": True, "job": store.get("analyses", "smoke"),
               "calls_made": sum(llm.calls for llm in llms), "max_calls": args.max_calls,
               "findings": [f.model_dump(mode="json") for f in findings],
