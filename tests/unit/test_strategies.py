@@ -120,3 +120,15 @@ def test_changing_the_target_or_claim_changes_the_scoring_context():
     reworded = state.claim.model_copy(update={"text": "Emissions per unit fell 40%.", "version": 2})
     assert strategies.context_hash(other_target, state.claim, members, []) != base
     assert strategies.context_hash(state.target, reworded, members, []) != base
+
+
+def test_a_score_is_not_reused_for_another_target_or_scorer_version(monkeypatch):
+    llm, state = FakeLLM(), _state()
+    reconcile(state, [_item(1, "A.")], {})
+    strategies.score_groups(state, llm, _manifest())
+    state.target = state.target.model_copy(update={"id": "averitec-refuted"})
+    strategies.score_groups(state, llm, _manifest())
+    assert llm.score_calls == 2
+    monkeypatch.setattr(strategies, "SCORER_VERSION", "llm-scorer-v2")
+    strategies.score_groups(state, llm, _manifest())
+    assert llm.score_calls == 3 and state.scores[0].scorer_version == "llm-scorer-v2"

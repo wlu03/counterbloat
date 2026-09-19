@@ -5,7 +5,7 @@ from backend.config import AssessmentSettings, Settings
 from backend.ingestion.snapshot import admit
 from backend.models import BeliefUpdate, EvidenceStatus, Finding, InvestigationState, Mode
 from backend.orchestration.worker import Deps, run_analysis
-from backend.providers.base import Report, ReviewResult
+from backend.providers.base import EvidenceAnalysis, Report, ReviewResult
 from backend.retrieval.memory import MemoryIndex
 from tests.fakes import ARTICLE, REPORT, FakeLLM
 
@@ -107,3 +107,35 @@ def test_an_unfinished_requested_check_stays_visible(store):
     assert finding.review_status == "draft"
     assert any("Confirm the organisational boundary." in q
                for q in finding.uncertainty.critical_missing_questions)
+
+
+def test_a_source_published_after_the_cutoff_is_not_used(store):
+    from datetime import UTC, datetime
+
+    shown = []
+
+    class Recording(FakeLLM):
+        def analyze_evidence(self, claim, questions, context):
+            shown.append(context)
+            if "per unit" not in context:
+                return EvidenceAnalysis(judgments=[], programs=[], answers=[])
+            return super().analyze_evidence(claim, questions, context)
+
+    deps = Deps(store=store, index=MemoryIndex(), llm_factory=Recording,
+                settings=Settings(mode=Mode.replay))
+    claim_page = b"<html><body><p>We reduced our total operational emissions by 40% in 2025 " \
+                 b"compared with 2024.</p></body></html>"
+    early, spans = admit(store, claim_page, "text/html", published_at=datetime(2026, 1, 1, tzinfo=UTC))
+    deps.index.index(early, spans)
+    late, spans = admit(store, REPORT, "text/html", published_at=datetime(2026, 6, 1, tzinfo=UTC))
+    deps.index.index(late, spans)
+    store.put("analyses", "an-1", {"id": "an-1", "document_id": early.id, "status": "queued",
+                                   "mode": "replay", "cutoff": "2026-03-01T00:00:00+00:00"},
+              document_id=early.id)
+    run_analysis("an-1", deps)
+    [finding] = store.find("findings", Finding, analysis_id="an-1")
+    [state] = store.find("states", InvestigationState, analysis_id="an-1")
+    assert finding.evidence_status == EvidenceStatus.insufficient and finding.evidence_ids == []
+    assert shown and all("units produced" not in context for context in shown)
+    assert state.evidence == [] and state.calculations == []
+    assert state.target.cutoff == datetime(2026, 3, 1, tzinfo=UTC)
