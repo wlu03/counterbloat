@@ -1,0 +1,2 @@
+# Only needed to extract page text from original FinanceBench PDFs.
+PyMuPDF>=1.24,<2

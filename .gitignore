@@ -11,3 +11,10 @@ next-env.d.ts
 *.tsbuildinfo
 prepared/
 results/
+docs/
+# Downloaded benchmark data: CC BY-NC for two of three, and evaluator_only holds the labels.
+datasets/*/runtime/
+datasets/*/evaluator_only/
+datasets/*/downloads/
+datasets/*/manifest.json
+datasets/*/corpus_manifest.json
