@@ -10,7 +10,7 @@ what remains unresolved. It does not infer intent and it does not publish a prob
     docker compose up -d            # PostgreSQL and Elasticsearch
     cp .env.example .env            # fill in keys and model identifiers
     uv sync
-    uv run uvicorn backend.api.app:app --reload
+    uv run --env-file .env uvicorn backend.api.app:app --reload   # the app does not read .env itself
     cd apps/web && npm install && npm run dev
 
 Without `DATABASE_URL` the backend uses a local SQLite file. Without `ELASTICSEARCH_URL` it uses an
