@@ -107,7 +107,9 @@ class OpenAILLM:
         """Return candidate URLs only. The caller fetches and preserves each source."""
         try:
             response = self.client.responses.create(
-                model=self.reason_model, input=query, tools=[{"type": "web_search"}],
+                model=self.reason_model, tools=[{"type": "web_search"}],
+                input=[{"role": "developer", "content": prompts.DISCOVERER},
+                       {"role": "user", "content": json.dumps({"claim": query})}],
                 include=["web_search_call.action.sources"], store=False,
             )
         except Exception as exc:

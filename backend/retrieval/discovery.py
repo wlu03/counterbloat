@@ -4,18 +4,16 @@ from __future__ import annotations
 from backend.db import Store
 from backend.ingestion.fetch import BlockedDestination, FetchError
 from backend.ingestion.snapshot import admit_url
-from backend.models import Mode, RunManifest
+from backend.models import RunManifest
 from backend.providers.base import LLM, ProviderError
 from backend.retrieval.search import SearchIndex
 
 MAX_SOURCES = 3
 
 
-def discover(llm: LLM, store: Store, index: SearchIndex, query: str, mode: Mode,
+def discover(llm: LLM, store: Store, index: SearchIndex, query: str,
              manifest: RunManifest) -> list[str]:
     """Fetch, preserve, and index candidate sources. Return the new document ids."""
-    if mode != Mode.live:
-        return []
     try:
         urls = llm.discover(query)
     except ProviderError as exc:

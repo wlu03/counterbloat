@@ -53,3 +53,8 @@ REPORTER = (
     " company-reported figures to the company. Do not describe intent. Return null for the"
     " rewrite when the evidence supports no specific wording." + _DATA_RULE
 )
+
+DISCOVERER = (
+    "Search the web for primary sources that would confirm or refute the claim in the user"
+    " message." + _DATA_RULE
+)

@@ -111,7 +111,7 @@ def investigate(analysis_id: str, claim: Claim, deps: Deps, llm: LLM, manifest: 
         passages, context = retrieve(deps.index, store, claim, selected, settings.retrieval,
                                      corpus, cutoff)
         if mode == Mode.live and all(p.document_id == claim.document_id for p in passages):
-            if discover(llm, store, deps.index, claim.text, mode, manifest):
+            if discover(llm, store, deps.index, claim.text, manifest):
                 passages, context = retrieve(deps.index, store, claim, selected,
                                              settings.retrieval, corpus, cutoff)
         if not passages:
