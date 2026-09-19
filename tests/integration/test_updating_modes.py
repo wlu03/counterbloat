@@ -35,7 +35,7 @@ def test_accumulator_mode_stores_an_internal_score_and_no_public_probability(sto
     assert belief.method == "evidence_accumulator" and belief.calibration_status == "uncalibrated"
     assert belief.target_id == state.target.id == "material-overstatement-v1"
     assert 0.5 < belief.raw_probability < 1 and belief.calibrated_probability is None
-    # The two groups that feed the calculation are scored as one unit, so its result counts once.
+    # The two groups that the calculation reads are scored as one unit, so its result counts once.
     scored = [set(c.group_id.split("+")) for c in belief.contributions]
     assert sorted(map(len, scored)) == [1, 2]
     assert set().union(*scored) == {g.id for g in state.groups if g.active}

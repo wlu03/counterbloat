@@ -94,7 +94,7 @@ def detect(row: dict, llm_factory: Callable, router: Router | None = None) -> di
 def verify(row: dict, llm_factory: Callable, searchable: dict[str, list[dict]],
            task: VerificationTask, system: str, settings: Settings, router=None,
            compressor=None) -> dict:
-    """A fresh store and index for the example, holding only its own searchable documents."""
+    """A new store and index for the example, holding only its own searchable documents."""
     store, index = Store("sqlite://"), MemoryIndex()
     text = row[task.text_field]
     document, _ = admit(store, text.encode(), "text/plain")

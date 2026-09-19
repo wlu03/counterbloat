@@ -1,8 +1,8 @@
 # Evaluation protocol
 
-No dataset experiment has been run. The commands below exist and are covered by tests that use
-scripted providers. The only results produced so far are the scripted replays of the two
-synthetic fixtures.
+No dataset experiment has been run. The commands below exist. All except the live smoke test
+are covered by tests that use scripted providers. The results produced so far are the scripted
+replays of the two synthetic fixtures and two live smoke runs of the fictional example.
 
 ## Deterministic suite
 
@@ -39,7 +39,8 @@ To replay with the real models, which is paid and bounded by `--max-calls`:
     uv run --env-file .env python -m evaluation.smoke --max-calls 25 --out results/smoke.json
 
 One run of the fictional emissions report through the real providers with the accumulator. The
-command fails if any finding carries a public probability.
+command exits with an error if no finding is produced or if a finding has a public probability.
+No test covers this command.
 
 ## Dataset preparation
 
@@ -47,8 +48,8 @@ command fails if any finding carries a public probability.
 
 The file must already be on disk. Nothing is downloaded. Obtain each dataset from its publisher
 under its license. The command writes `prepared/DATASET/SPLIT.visible.jsonl` (runtime inputs),
-`gold/DATASET/SPLIT.jsonl` (labels, owner-readable only), and a manifest with the file hash, row
-count, revision, license, and field names. `prepared/`, `gold/`, and `results/` are ignored by
+`gold/DATASET/SPLIT.jsonl` (labels, owner-readable only), and `prepared/DATASET/SPLIT.manifest.json`
+with the file hash, row count, revision, license, and field names. `prepared/`, `gold/`, and `results/` are ignored by
 git.
 
 A system under test reads three things and nothing else: the visible file, the searchable file,
@@ -75,11 +76,13 @@ dataset's Refuted label, not overstatement.
         --prices PRICES.json --out results/averitec_A2.score.json
 
 A1 is one search on the claim text and one judgment. A2 is the structured pipeline. Both use the
-same searchable documents and the same in-memory keyword index, and each prediction records
-that no vector search took place. Examples past the call budget are written as `not_run` and
-are left out of the score. Brier score and negative log-likelihood cover only the examples that
-have a score, and are `unavailable` when none has. Cost is `unknown` unless the price list names
-every model that was used.
+same searchable documents and the same in-memory keyword index, and each prediction that made a
+search records that no vector search took place. An example in which a provider call failed or
+was refused by the call budget is written as `not_run` and is left out of the score, as are
+examples after the budget is used up. Gold rows without a usable label are counted and skipped. Brier score and negative log-likelihood cover only the examples that
+have a score, and are `unavailable` when none has or when the predictions name different
+targets. Cost is `unknown` unless the price list names every model that was used, and also
+whenever Jev or Token Company calls were made, because their prices are not modelled.
 
 ## Jev and compression ablations
 

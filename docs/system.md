@@ -39,8 +39,9 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
 - When the review asks for a check, the request becomes a critical question and gets at most
   `max_follow_up_rounds` further rounds, then a second review. A check that was still not
   completed is listed in the finding. The report is written from the reviewed assessment.
-- A withdrawal or correction removes the item from the active ledger, keeps it in the history,
-  and removes the calculations that depended on it.
+- A withdrawal or correction removes the item from the active ledger and keeps it in the
+  history. A calculation is removed when a group it read from is no longer active, or when it
+  cites the withdrawn passage and no admitted item cites that passage any more.
 - The claim's own sentence is not accepted as evidence for the claim.
 - The finding summary and the supported rewrite may use only numbers found in the claim, the
   evidence passages, or the calculation outputs. Otherwise the summary is replaced by a fixed
@@ -71,9 +72,10 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
   its first data row.
 - Authentication is one shared API key. There are no users or tenants.
 - The run manifest records the commit, the updater, model identifiers, the prompt and checklist
-  versions, the configuration hash, the cutoff, every OpenAI, Jev, and Token Company call with
-  token counts and latency, passages that routing excluded, compression fallbacks, whether the
-  last search used vectors, errors, and rejections. It does not record SDK versions or a corpus
+  versions, the configuration hash, the cutoff, OpenAI, Jev, and Token Company calls with token
+  counts (latency for all but embedding and discovery calls; a failed embedding or discovery
+  call is not recorded as a call), passages that routing excluded, compression fallbacks, whether every
+  search of the analysis used vectors, errors, and rejections. It does not record SDK versions or a corpus
   hash. Cost is computed by the scoring step from a price list the user supplies, and is
   reported as unknown without one.
 - Jev and Token Company calls are tried once. A job runs as a FastAPI background task and cannot

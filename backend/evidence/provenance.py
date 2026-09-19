@@ -44,7 +44,7 @@ def reconcile(state: InvestigationState, items: list[EvidenceItem],
         by_text.setdefault(_family_key(item.quote), item.group_id)
         group = groups.setdefault(item.group_id, EvidenceGroup(id=item.group_id, member_ids=[]))
         if not group.active:
-            # A group emptied by a withdrawal is active again. Scores of its old version lapse.
+            # A group emptied by a withdrawal is active again. Scores of its old version no longer apply.
             group.active, group.version = True, group.version + 1
             group.history.append(f"v{group.version}: {item.id} admitted again")
         group.member_ids.append(item.id)

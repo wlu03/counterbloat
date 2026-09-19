@@ -7,13 +7,14 @@ One setting selects how an investigation turns its evidence into an assessment:
 
 All three run through `backend/belief/strategies.py::step`. The worker and the replay harness
 call the same function. Before it runs, the round's evidence, answers, and verified calculations
-are already in the state, so the strategy decides with the current results in front of it.
+are already in the state, so the strategy is given the current round's results.
 
 None of the three is exact Bayesian inference. The sections below say what each one is.
 
 ## What a score is a score of
 
-A number is stored only together with a `ScoringTarget`. The default target is:
+A score is stored on a state that names its `ScoringTarget`, and every evaluation output names
+the target of the scores it contains. The default target is:
 
 > H = 1: the reference review, applying the rubric to this claim as worded and to evidence
 > admissible at the cutoff, would find a material overstatement.
@@ -30,8 +31,9 @@ them with a notice, and only when `COUNTERCHECK_RESEARCH_VIEW` is set.
 
 ## linguistic
 
-The model is given the previous assessment, the evidence ledger, the verified calculations, and
-the ids of what is new. It returns a status, mechanisms, and an explanation. No number is
+The model is given the previous assessment, the active evidence, the questions and answers, the
+verified calculations, and the ids of what is new. It is not given withdrawn items, internal
+scores, or the scoring target. It returns a status, mechanisms, and an explanation. No number is
 produced. This is a model judgment that is conditioned on its own earlier judgment, so it can
 depend on the order in which evidence arrived.
 
@@ -54,7 +56,7 @@ The status comes from the linguistic update. In addition, a score is computed:
 - A scoring unit is one active provenance group, or several groups joined because one
   calculation reads its inputs from all of them. A calculation is derived from its input groups.
   If each input group were scored with the result, the result would count once per group. The
-  first live run showed this: two groups that fed one calculation each received about +4.5.
+  first live run showed this: two groups read by one calculation each received about +4.5.
   They are now scored together and the result counts once.
 - `s_u` is the log-evidence of unit `u`: the model's estimate of
   ln( P(evidence | H = 1) / P(evidence | H = 0) ), limited to [-5, 5]. Its method is recorded as
@@ -73,7 +75,7 @@ The status comes from the linguistic update. In addition, a score is computed:
   contributes nothing. It is not counted as zero evidence observed, and missing evidence is
   never a negative contribution.
 
-This is an approximation with three known gaps. The units are treated as conditionally
+This is an approximation with three known limitations. The units are treated as conditionally
 independent given H, which is false when two sources share an unstated origin. The per-group
 values are estimates by a language model, not measured likelihood ratios. No calibration data
 exists, so `calibrated_probability` stays null and `calibration_status` stays `uncalibrated`.
@@ -101,7 +103,8 @@ about any real evidence.
 ## What links a calculation to a verdict
 
 A calculation names the output that measures the quantity the claim states and the value the
-claim states for it. Code compares the two to the precision the claim is written with and stores
+claim states for it. Code compares the two to the precision of the number as written in the
+claim and stores
 `claim_relation`: `agrees`, `disagrees`, or `none`. The expected value must be a number written
 in the claim. A verdict of `supported` or `contradicted` needs comparable evidence about the
 claim in that direction, or a calculation whose relation is `agrees` or `disagrees`. A
@@ -110,7 +113,7 @@ calculation that answers a side question has relation `none` and cannot justify 
 ## Retries and failures
 
 Each committed update stores a hash of what the strategy was shown. A retry with the same input
-records no second update and does not move a score. When the provider call of a strategy fails,
+records no second update and does not change a score. When the provider call of a strategy fails,
 the round's evidence, answers, and calculations stay recorded and no assessment transition is
 written.
 

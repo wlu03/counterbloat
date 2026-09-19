@@ -97,7 +97,7 @@ def test_groups_that_feed_one_calculation_are_scored_together_and_count_once():
     assert {s.group_id: s.log_evidence for s in state.scores} == {"+".join(sorted([a, b])): 1.5, c: 0.25}
     settings = AssessmentSettings(updater="evidence_accumulator", prior=0.5)
     assert strategies.accumulate(state, settings).raw_logit == pytest.approx(1.75)
-    withdraw(state, "e2")  # the calculation loses an input group, so the joined score lapses
+    withdraw(state, "e2")  # the calculation loses an input group, so the joined score no longer applies
     assert strategies.accumulate(state, settings).raw_logit == pytest.approx(0.25)
 
 
@@ -145,6 +145,6 @@ def test_a_score_is_not_reused_for_another_target_or_scorer_version(monkeypatch)
     state.target = state.target.model_copy(update={"id": "averitec-refuted"})
     strategies.score_groups(state, llm, _manifest())
     assert llm.score_calls == 2
-    monkeypatch.setattr(strategies, "SCORER_VERSION", "llm-scorer-v2")
+    monkeypatch.setattr(strategies, "SCORER_VERSION", "llm-scorer-next")
     strategies.score_groups(state, llm, _manifest())
-    assert llm.score_calls == 3 and state.scores[0].scorer_version == "llm-scorer-v2"
+    assert llm.score_calls == 3 and state.scores[0].scorer_version == "llm-scorer-next"

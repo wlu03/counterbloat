@@ -28,7 +28,7 @@ Tests use fake providers and need no keys or services.
 
 `assessment.updater` in `config/app.yaml` selects `linguistic`, `full_context`, or
 `evidence_accumulator`. `docs/belief_updating.md` states what each one computes. Internal scores
-are experimental and uncalibrated. A finding never carries a probability. Set
+are experimental and uncalibrated. A finding never has a probability. Set
 `COUNTERCHECK_RESEARCH_VIEW=1` to let the reader show the internal research panel.
 
     uv run python -m evaluation.replay.run --trace evaluation/fixtures/emissions.json --out results/replay_emissions.json

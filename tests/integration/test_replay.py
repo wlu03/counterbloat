@@ -71,7 +71,7 @@ def test_order_and_repetition_do_not_move_the_accumulator():
     comparison = result["strategies"]["evidence_accumulator"]["comparison"]
     assert comparison["order_score_range"] == pytest.approx(0)
     assert comparison["duplicate_source"]["score_change"] == pytest.approx(0)
-    # The unrelated passage has no recorded score, so it abstains and the score stays put.
+    # The unrelated passage has no recorded score, so it abstains and the score does not change.
     assert comparison["irrelevant_addition"]["score_change"] == pytest.approx(0)
     # Scores exist only where the strategy produces them. Elsewhere they are reported as missing.
     assert result["strategies"]["linguistic"]["comparison"]["order_score_range"] is None

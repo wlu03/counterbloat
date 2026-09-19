@@ -150,7 +150,7 @@ class EvidenceItem(BaseModel):
     claim_id: str
     span_id: str
     document_id: str
-    # The source version and date, the round that retrieved the passage, and where it sits.
+    # The source version and date, the round that retrieved the passage, and its offsets.
     document_sha256: str | None = None
     published_at: datetime | None = None
     round: int = 0

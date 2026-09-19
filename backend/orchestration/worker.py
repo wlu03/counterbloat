@@ -181,7 +181,7 @@ def _rounds(analysis_id: str, state: InvestigationState, seen: dict[str, SourceS
         reconcile(state, items, repeats)
         calculations = _calculations(analysis, state, shown, manifest)
         # Evidence, answers, and verified calculations are recorded before the updater runs, so
-        # the updater decides with the current round's results in front of it. They stay
+        # the updater is given the current round's results. They stay
         # recorded if the updater fails. Each calculation is appended here and nowhere else.
         state.calculations += calculations
         apply_answers(state, analysis.answers)

@@ -138,7 +138,7 @@ def variants(trace: Trace, seed: int, permutations: int) -> dict[str, Trace]:
         document_id="irrelevant", quote=IRRELEVANT, relationship=Relationship.context,
         target="claim")))
     out["withdrawal"] = extended(Event(kind="withdraw", evidence_id=pick.id))
-    # The correction keeps the passage and removes its bearing on the claim.
+    # After the correction the passage is still cited, but only as context for the claim.
     out["correction"] = extended(Event(kind="correct", evidence_id=pick.id, evidence=pick.model_copy(
         update={"id": pick.id + "-corrected", "relationship": Relationship.context,
                 "limitations": pick.limitations + ["the source corrected this passage"]})))

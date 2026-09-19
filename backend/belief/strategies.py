@@ -23,7 +23,7 @@ from backend.models import (
 )
 from backend.providers.base import LLM, ProviderError, StateUpdate
 
-SCORER_VERSION = "llm-scorer-v1"
+SCORER_VERSION = "llm-scorer-v2"
 MAX_LOG_EVIDENCE = 5.0
 
 
@@ -100,7 +100,7 @@ def units(state: InvestigationState) -> dict[str, list[EvidenceGroup]]:
 
 
 def _version(members: list[EvidenceGroup]) -> int:
-    # Group versions only rise, so the sum changes whenever any member group changes.
+    # Group versions only increase, so the sum changes whenever any member group changes.
     return sum(g.version for g in members)
 
 
@@ -178,8 +178,9 @@ def step(state: InvestigationState, new_evidence_ids: list[str], new_calculation
          model_version: str) -> BeliefUpdate | None:
     """Run the strategy once and commit the result. The worker and the replay both call this.
 
-    Return None when the state holds nothing the last committed update did not already see, so a
-    retry cannot record a second update or move a score. A ProviderError leaves the state as it was.
+    Return None when the input is the same as the input of the last committed update, so a
+    retry cannot record a second update or change a score. A ProviderError leaves the state as
+    it was.
     """
     shown = input_hash(state, settings.updater)
     if shown == state.last_input_hash:

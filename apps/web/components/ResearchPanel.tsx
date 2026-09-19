@@ -25,9 +25,9 @@ export function ResearchPanel({ research }: { research: Research }) {
             {fixed(belief.raw_logit)}). Method: {belief.method}.</p>
           {belief.contributions.length > 0 && (
             <table>
-              <caption>Contribution of each source group to the raw score</caption>
+              <caption>Contribution of each scoring unit to the raw score</caption>
               <thead>
-                <tr><th>Group</th><th>Log evidence</th><th>Method</th><th>Basis</th></tr>
+                <tr><th>Unit (source groups)</th><th>Log evidence</th><th>Method</th><th>Basis</th></tr>
               </thead>
               <tbody>
                 {belief.contributions.map((s) => (
