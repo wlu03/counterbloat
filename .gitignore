@@ -18,3 +18,5 @@ datasets/*/evaluator_only/
 datasets/*/downloads/
 datasets/*/manifest.json
 datasets/*/corpus_manifest.json
+.env.*
+!.env.example
