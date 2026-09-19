@@ -1,7 +1,7 @@
 """One budgeted live run of the fictional emissions example through the real providers.
 
 Usage: uv run --env-file .env python -m evaluation.smoke --out results/smoke.json
-           [--updater evidence_accumulator] [--max-calls 25]
+           [--updater evidence_accumulator] [--max-calls 500]
 
 This makes paid OpenAI calls. The run stops making calls once --max-calls is reached. The
 command exits with an error when no finding is produced or a finding has a public probability.
@@ -29,7 +29,7 @@ def main() -> None:
     parser.add_argument("--out", required=True)
     parser.add_argument("--updater", default="evidence_accumulator",
                         choices=["linguistic", "full_context", "evidence_accumulator"])
-    parser.add_argument("--max-calls", type=int, default=25)
+    parser.add_argument("--max-calls", type=int, default=500)
     args = parser.parse_args()
     from backend.providers.openai_client import OpenAILLM
 

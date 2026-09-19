@@ -33,14 +33,18 @@ To replay a stored investigation, export it first:
 
     uv run python -m evaluation.replay.trace ANALYSIS_ID CLAIM_ID --out results/trace.json
 
+The paid commands below run with high default bounds: `--max-calls` is 5000 for a replay, 500
+for the smoke test, and 50000 for a dataset run, and `--limit` is 2000 examples. Pass a smaller
+value to cap the spend of a run.
+
 To replay with the real models, which is paid and bounded by `--max-calls`:
 
     uv run --env-file .env python -m evaluation.replay.run --trace results/trace.json \
-        --provider openai --permutations 1 --max-calls 120 --out results/replay_live.json
+        --provider openai --permutations 1 --out results/replay_live.json
 
 ## Budgeted live smoke test
 
-    uv run --env-file .env python -m evaluation.smoke --max-calls 25 --out results/smoke.json
+    uv run --env-file .env python -m evaluation.smoke --out results/smoke.json
 
 One run of the fictional emissions report through the real providers with the accumulator. The
 command exits with an error if no finding is produced or if a finding has a public probability.
@@ -70,10 +74,10 @@ dataset's Refuted label, not overstatement.
 
     uv run --env-file .env python -m evaluation.experiments.run verify --dataset averitec \
         --visible prepared/averitec/dev.visible.jsonl --searchable SEARCHABLE.jsonl \
-        --system A1 --limit 20 --max-calls 200 --out results/averitec_A1.jsonl
+        --system A1 --out results/averitec_A1.jsonl
     uv run --env-file .env python -m evaluation.experiments.run verify --dataset averitec \
         --visible prepared/averitec/dev.visible.jsonl --searchable SEARCHABLE.jsonl \
-        --system A2 --updater evidence_accumulator --limit 20 --max-calls 600 \
+        --system A2 --updater evidence_accumulator \
         --out results/averitec_A2.jsonl
     uv run python -m evaluation.experiments.run score --dataset averitec \
         --predictions results/averitec_A2.jsonl --gold gold/averitec/dev.jsonl \

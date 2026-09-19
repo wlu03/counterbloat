@@ -2,7 +2,7 @@
 
 Usage: python -m evaluation.replay.run --trace TRACE.json --out RESULT.json
            [--provider scripted|openai] [--strategies NAME ...] [--seed 7] [--permutations 3]
-           [--max-calls 60] [--prior 0.5] [--tempering 1.0]
+           [--max-calls 5000] [--prior 0.5] [--tempering 1.0]
 
 The scripted provider makes no network calls. The openai provider is paid, so --max-calls
 bounds the whole run.
@@ -233,7 +233,7 @@ def main() -> None:
     parser.add_argument("--strategies", nargs="+", choices=STRATEGIES, default=STRATEGIES)
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--permutations", type=int, default=3)
-    parser.add_argument("--max-calls", type=int, default=60)
+    parser.add_argument("--max-calls", type=int, default=5000)
     parser.add_argument("--prior", type=float, default=0.5)
     parser.add_argument("--tempering", type=float, default=1.0)
     args = parser.parse_args()

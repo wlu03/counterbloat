@@ -7,7 +7,8 @@
       [--dataset averitec] [--prices PRICES.json]
 
 detect and verify never open a gold file. They call OpenAI, which is paid, so --max-calls bounds
-the run and --limit bounds the number of examples. Examples not reached are reported as not run.
+the run (default 50000) and --limit bounds the number of examples (default 2000). Examples not
+reached are reported as not run.
 S.jsonl rows: {"example_id", "content", "media_type"?, "url"?, "published_at"?}. PRICES.json maps
 a model name to [input, cached input, output] price per token.
 """
@@ -205,8 +206,8 @@ def main() -> None:
     parser.add_argument("--system", choices=["A1", *ABLATIONS], default="A2")
     parser.add_argument("--updater", choices=["linguistic", "full_context", "evidence_accumulator"])
     parser.add_argument("--jev", action="store_true")
-    parser.add_argument("--limit", type=int, default=20)
-    parser.add_argument("--max-calls", type=int, default=200)
+    parser.add_argument("--limit", type=int, default=2000)
+    parser.add_argument("--max-calls", type=int, default=50000)
     parser.add_argument("--prices")
     args = parser.parse_args()
     needed = {"detect": ["visible"], "verify": ["visible", "dataset"],
