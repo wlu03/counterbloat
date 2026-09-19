@@ -24,6 +24,29 @@ without routing, or the context is sent uncompressed, and the error is added to 
 
 Tests use fake providers and need no keys or services.
 
+## Benchmark datasets
+
+The benchmark kit is in `datasets/Counterbloat_Public_Benchmark_Kits_v1_1/`. Start with its
+`START_HERE.md`.
+
+| Dataset          | Main question it answers                                                                                                                                    |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **FinQA**        | Can the system select the correct financial numbers and perform the correct calculation?                                                                    |
+| **FinanceBench** | Can the system find information in a complete corporate report and answer with supporting citations?                                                        |
+| **AVeriTeC**     | Can the system investigate a claim, retrieve evidence, and distinguish support, contradiction, and insufficient evidence?                                   |
+| **ASA**          | Can the system explain the discrepancy in a real advertising claim? **The current package tests retrospective interpretation, not independent detection.** |
+
+The ASA data is included: 30 assertions from 24 rulings, with draft references that have not
+been reviewed. FinQA, FinanceBench, and AVeriTeC are not included. The kit downloads each of
+them to your machine:
+
+    cd datasets/Counterbloat_Public_Benchmark_Kits_v1_1
+    python benchmark.py validate --dataset asa --mode retrospective
+    python benchmark.py prepare --dataset finqa --accept-license
+
+Give a system under test only the selected mode's `runtime/` folder. The `evaluator_only/` and
+`bundled/` folders and the guides contain answers.
+
 ## Updating strategies and experiments
 
 `assessment.updater` in `config/app.yaml` selects `linguistic`, `full_context`, or
