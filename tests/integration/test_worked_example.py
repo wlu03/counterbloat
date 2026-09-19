@@ -113,3 +113,23 @@ def test_cancel_during_the_only_claim_is_not_reported_complete(store):
     assert _run(deps, [REPORT]) == []
     job = store.get("analyses", "an-1")
     assert job["status"] == "cancelled" and job["partial"] is True
+
+
+def test_a_renamed_copy_of_a_calculation_is_recorded_once(store):
+    class Renaming(FakeLLM):
+        def analyze_evidence(self, claim, questions, context):
+            analysis = super().analyze_evidence(claim, questions, context)
+            copy = analysis.programs[0].model_copy(deep=True)
+            renames = {"i24": "a", "i25": "b", "u24": "c", "u25": "d"}
+            for value in copy.inputs:
+                value.name = renames[value.name]
+            for step in copy.steps:
+                step.args = [renames.get(arg, arg) for arg in step.args]
+            analysis.programs.append(copy)
+            return analysis
+
+    deps = _deps(store)
+    deps.llm_factory = Renaming
+    _run(deps, [REPORT])
+    [state] = store.find("states", InvestigationState, analysis_id="an-1")
+    assert len(state.calculations) == 1

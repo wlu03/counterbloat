@@ -75,7 +75,12 @@ def _items(analysis: EvidenceAnalysis, state: InvestigationState, shown: dict[st
 def _calculations(analysis: EvidenceAnalysis, state: InvestigationState,
                   shown: dict[str, SourceSpan], manifest: RunManifest) -> list[Calculation]:
     results = []
-    done = [(c.inputs, c.steps) for c in state.calculations]
+    def key(inputs, steps):
+        # Two programs are the same calculation when they read the same numbers from the same
+        # passages and apply the same operations. Names chosen by the model are ignored.
+        return (sorted((i.source_span_id, i.value) for i in inputs), [s.op for s in steps])
+
+    done = [key(c.inputs, c.steps) for c in state.calculations]
     for program in analysis.programs:
         calc_id = f"{state.claim.id}-n{len(state.calculations) + len(results)}"
         try:
@@ -85,8 +90,9 @@ def _calculations(analysis: EvidenceAnalysis, state: InvestigationState,
                 span = shown.get(value.source_span_id)
                 if span is None or not value_in_source(value.value, span):
                     raise CalculationError(f"input {value.name} is not in its cited passage")
-            if (inputs, program.steps) in done:
-                continue  # the same calculation was already recorded in an earlier round
+            if key(inputs, program.steps) in done:
+                continue  # the same calculation was already recorded
+            done.append(key(inputs, program.steps))
             spans = [i.source_span_id for i in inputs]
             results.append(execute(calc_id, state.claim.id, inputs, program.steps, program.note,
                                    lineage(state, spans)))
