@@ -7,7 +7,7 @@ import re
 from backend.models import EvidenceGroup, EvidenceItem, EvidenceOrigin, InvestigationState
 
 
-def _family_key(quote: str) -> str:
+def family_key(quote: str) -> str:
     normalized = re.sub(r"\W+", " ", quote.lower()).strip()
     return "grp-" + hashlib.sha256(normalized.encode()).hexdigest()[:12]
 
@@ -32,18 +32,30 @@ def reconcile(state: InvestigationState, items: list[EvidenceItem],
     for item in sorted(items, key=lambda i: i.span_id in repeats):
         if (item.span_id, item.target) in known:
             continue
-        original = by_span.get(repeats.get(item.span_id, ""))
+        item.repeats_span_id = repeats.get(item.span_id)
+        original = by_span.get(item.repeats_span_id or "")
         if original is not None and original.group_id:
             item.group_id = original.group_id
             item.origin = EvidenceOrigin.third_party_repetition
         else:
-            item.group_id = _family_key(item.quote)
+            item.group_id = family_key(item.quote)
         group = groups.setdefault(item.group_id, EvidenceGroup(id=item.group_id, member_ids=[]))
+        if not group.active:
+            # A group emptied by a withdrawal is active again. Scores of its old version lapse.
+            group.active, group.version = True, group.version + 1
+            group.history.append(f"v{group.version}: {item.id} admitted again")
         group.member_ids.append(item.id)
         state.evidence.append(item)
         by_span[item.span_id] = item
         known.add((item.span_id, item.target))
     state.groups = list(groups.values())
+    for item in state.evidence:
+        # A repetition admitted before its original was grouped alone. Join them now, so the
+        # grouping does not depend on the order of arrival.
+        original = by_span.get(item.repeats_span_id or "")
+        if original is not None and original.group_id != item.group_id:
+            item.origin = EvidenceOrigin.third_party_repetition
+            merge(state, original.group_id, item.group_id)
     return evidence_hash(state.groups) != before
 
 

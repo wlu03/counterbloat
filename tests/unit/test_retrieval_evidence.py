@@ -92,3 +92,23 @@ def test_source_text_cannot_close_a_protected_span():
     context, used = build_context(decisive, ["filler " * 300], _Compressor())
     # The passage had to be altered to be sent safely, so the unaltered context is used instead.
     assert not used and decisive[0] in context
+
+
+def test_a_repetition_admitted_before_its_original_joins_the_original_group():
+    state = _state()
+    reconcile(state, [_item(3, "s3", "The firm says intensity dropped two fifths")], {"s3": "s1"})
+    assert len([g for g in state.groups if g.active]) == 1
+    reconcile(state, [_item(1, "s1", "Emissions per unit fell 40%.")], {})
+    [group] = [g for g in state.groups if g.active]
+    assert sorted(group.member_ids) == ["e1", "e3"] and "merged" in group.history[0]
+    assert {e.group_id for e in state.evidence} == {group.id}
+    assert state.evidence[0].origin == "third_party_repetition"
+
+
+def test_a_passage_admitted_again_after_a_withdrawal_reactivates_its_group():
+    state = _state()
+    reconcile(state, [_item(1, "s1", "Output doubled.")], {})
+    withdraw(state, "e1")
+    assert reconcile(state, [_item(2, "s1", "Output doubled.")], {})
+    [group] = state.groups
+    assert group.active and group.version == 3 and [e.id for e in state.withdrawn] == ["e1"]

@@ -42,7 +42,7 @@ class Deps:
     transcribe: Callable[[bytes], str] | None = None  # reads PDF pages that have no text layer
 
 
-def _commit() -> str | None:
+def current_commit() -> str | None:
     try:
         return subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True,
                               timeout=5).stdout.strip() or None
@@ -212,7 +212,7 @@ def run_analysis(analysis_id: str, deps: Deps) -> None:
     mode = Mode(job.get("mode") or deps.settings.mode)
     cutoff = datetime.fromisoformat(job["cutoff"]) if job.get("cutoff") else None
     manifest = RunManifest(analysis_id=analysis_id, mode=mode, cutoff=cutoff,
-                           config_hash=deps.settings.config_hash(), commit=_commit(),
+                           config_hash=deps.settings.config_hash(), commit=current_commit(),
                            updater=deps.settings.assessment.updater)
 
     def save(status: str, **extra) -> None:

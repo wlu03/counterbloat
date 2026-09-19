@@ -163,6 +163,7 @@ class EvidenceItem(BaseModel):
     differences: list[str] = []
     origin: EvidenceOrigin = EvidenceOrigin.company_reported
     group_id: str | None = None
+    repeats_span_id: str | None = None  # the passage this one was judged to repeat
     limitations: list[str] = []
 
 

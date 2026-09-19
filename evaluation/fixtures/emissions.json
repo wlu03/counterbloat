@@ -1,0 +1,312 @@
+{
+  "id": "fictional-emissions",
+  "claim": {
+    "id": "fictional-doc-cc1c21f52b9abc84-s1-c0",
+    "document_id": "doc-cc1c21f52b9abc84",
+    "span_id": "doc-cc1c21f52b9abc84-s1",
+    "version": 1,
+    "text": "We reduced our total operational emissions by 40% in 2025 compared with 2024.",
+    "start": 45,
+    "end": 122,
+    "assertion_type": "numerical_comparison",
+    "subject": "Example Manufacturing",
+    "assertion": "reduced",
+    "metric": "total operational emissions",
+    "value": "40",
+    "unit": "%",
+    "denominator": null,
+    "population": null,
+    "boundary": null,
+    "period": "2025 compared with 2024",
+    "qualifications": [],
+    "rubric": "material-overstatement-v1"
+  },
+  "questions": [
+    {
+      "id": "fictional-doc-cc1c21f52b9abc84-s1-c0-q0",
+      "claim_id": "fictional-doc-cc1c21f52b9abc84-s1-c0",
+      "text": "Is the stated change absolute or intensity-based?",
+      "why_it_matters": "",
+      "evidence_needed": "",
+      "materiality": 2,
+      "answerability": 2,
+      "cost": 1,
+      "critical": true,
+      "status": "answered",
+      "answer": "The 40% figure is intensity-based.",
+      "evidence_ids": [
+        "fictional-doc-cc1c21f52b9abc84-s1-c0-e0"
+      ]
+    },
+    {
+      "id": "fictional-doc-cc1c21f52b9abc84-s1-c0-q1",
+      "claim_id": "fictional-doc-cc1c21f52b9abc84-s1-c0",
+      "text": "Which baseline period and value does the comparison use?",
+      "why_it_matters": "",
+      "evidence_needed": "",
+      "materiality": 2,
+      "answerability": 2,
+      "cost": 1,
+      "critical": false,
+      "status": "answered",
+      "answer": "Baseline 2024: 10 kg CO2e per unit.",
+      "evidence_ids": [
+        "fictional-doc-cc1c21f52b9abc84-s1-c0-e0"
+      ]
+    },
+    {
+      "id": "fictional-doc-cc1c21f52b9abc84-s1-c0-q2",
+      "claim_id": "fictional-doc-cc1c21f52b9abc84-s1-c0",
+      "text": "Do both periods cover the same operations and reporting method?",
+      "why_it_matters": "",
+      "evidence_needed": "",
+      "materiality": 2,
+      "answerability": 2,
+      "cost": 1,
+      "critical": false,
+      "status": "answered",
+      "answer": "Same operations and method.",
+      "evidence_ids": [
+        "fictional-doc-cc1c21f52b9abc84-s1-c0-e2"
+      ]
+    },
+    {
+      "id": "fictional-doc-cc1c21f52b9abc84-s1-c0-q3",
+      "claim_id": "fictional-doc-cc1c21f52b9abc84-s1-c0",
+      "text": "Which emissions or lifecycle components are included?",
+      "why_it_matters": "",
+      "evidence_needed": "",
+      "materiality": 2,
+      "answerability": 2,
+      "cost": 1,
+      "critical": false,
+      "status": "open",
+      "answer": null,
+      "evidence_ids": []
+    }
+  ],
+  "cutoff": null,
+  "events": [
+    {
+      "kind": "admit",
+      "evidence": {
+        "id": "fictional-doc-cc1c21f52b9abc84-s1-c0-e0",
+        "claim_id": "fictional-doc-cc1c21f52b9abc84-s1-c0",
+        "span_id": "doc-cc1c21f52b9abc84-s2",
+        "document_id": "doc-cc1c21f52b9abc84",
+        "document_sha256": "cc1c21f52b9abc847d18a1a3164cccca9b6ea3cda67e1649df7dccebfae85130",
+        "published_at": null,
+        "round": 1,
+        "start": 124,
+        "end": 218,
+        "quote": "2024: 10 | 2025: 6",
+        "relationship": "qualifies",
+        "target": "claim",
+        "comparable": false,
+        "differences": [
+          "denominator"
+        ],
+        "origin": "company_reported",
+        "group_id": "grp-28ba2c2213b9",
+        "repeats_span_id": null,
+        "limitations": [
+          "not directly comparable: denominator"
+        ]
+      },
+      "calculation": null,
+      "evidence_id": null,
+      "group_ids": []
+    },
+    {
+      "kind": "admit",
+      "evidence": {
+        "id": "fictional-doc-cc1c21f52b9abc84-s1-c0-e1",
+        "claim_id": "fictional-doc-cc1c21f52b9abc84-s1-c0",
+        "span_id": "doc-cc1c21f52b9abc84-s3",
+        "document_id": "doc-cc1c21f52b9abc84",
+        "document_sha256": "cc1c21f52b9abc847d18a1a3164cccca9b6ea3cda67e1649df7dccebfae85130",
+        "published_at": null,
+        "round": 1,
+        "start": 220,
+        "end": 304,
+        "quote": "2024: 1,000 | 2025: 2,000",
+        "relationship": "context",
+        "target": "claim",
+        "comparable": true,
+        "differences": [],
+        "origin": "company_reported",
+        "group_id": "grp-002f685402ae",
+        "repeats_span_id": null,
+        "limitations": []
+      },
+      "calculation": null,
+      "evidence_id": null,
+      "group_ids": []
+    },
+    {
+      "kind": "admit",
+      "evidence": {
+        "id": "fictional-doc-cc1c21f52b9abc84-s1-c0-e2",
+        "claim_id": "fictional-doc-cc1c21f52b9abc84-s1-c0",
+        "span_id": "doc-cc1c21f52b9abc84-s4",
+        "document_id": "doc-cc1c21f52b9abc84",
+        "document_sha256": "cc1c21f52b9abc847d18a1a3164cccca9b6ea3cda67e1649df7dccebfae85130",
+        "published_at": null,
+        "round": 1,
+        "start": 306,
+        "end": 409,
+        "quote": "the same operations, measurement method",
+        "relationship": "supports",
+        "target": "fictional-doc-cc1c21f52b9abc84-s1-c0-q2",
+        "comparable": true,
+        "differences": [],
+        "origin": "company_reported",
+        "group_id": "grp-9b212ef2d4bb",
+        "repeats_span_id": null,
+        "limitations": []
+      },
+      "calculation": null,
+      "evidence_id": null,
+      "group_ids": []
+    },
+    {
+      "kind": "admit",
+      "evidence": {
+        "id": "fictional-doc-cc1c21f52b9abc84-s1-c0-e3",
+        "claim_id": "fictional-doc-cc1c21f52b9abc84-s1-c0",
+        "span_id": "doc-d25f5413e56e2626-s0",
+        "document_id": "doc-d25f5413e56e2626",
+        "document_sha256": "d25f5413e56e2626d42472c1172f021eaf33b0b10a6db9f8058ccc2e377fb677",
+        "published_at": null,
+        "round": 1,
+        "start": 0,
+        "end": 106,
+        "quote": "per unit fell from 10 to 6",
+        "relationship": "qualifies",
+        "target": "claim",
+        "comparable": false,
+        "differences": [
+          "denominator"
+        ],
+        "origin": "third_party_repetition",
+        "group_id": "grp-28ba2c2213b9",
+        "repeats_span_id": "doc-cc1c21f52b9abc84-s2",
+        "limitations": []
+      },
+      "calculation": null,
+      "evidence_id": null,
+      "group_ids": []
+    },
+    {
+      "kind": "calculate",
+      "evidence": null,
+      "calculation": {
+        "id": "fictional-doc-cc1c21f52b9abc84-s1-c0-n0",
+        "claim_id": "fictional-doc-cc1c21f52b9abc84-s1-c0",
+        "inputs": [
+          {
+            "name": "i24",
+            "value": "10",
+            "unit": "kg CO2e/unit",
+            "period": "2024",
+            "population": null,
+            "boundary": null,
+            "source_span_id": "doc-cc1c21f52b9abc84-s2"
+          },
+          {
+            "name": "i25",
+            "value": "6",
+            "unit": "kg CO2e/unit",
+            "period": "2025",
+            "population": null,
+            "boundary": null,
+            "source_span_id": "doc-cc1c21f52b9abc84-s2"
+          },
+          {
+            "name": "u24",
+            "value": "1000",
+            "unit": "unit",
+            "period": "2024",
+            "population": null,
+            "boundary": null,
+            "source_span_id": "doc-cc1c21f52b9abc84-s3"
+          },
+          {
+            "name": "u25",
+            "value": "2000",
+            "unit": "unit",
+            "period": "2025",
+            "population": null,
+            "boundary": null,
+            "source_span_id": "doc-cc1c21f52b9abc84-s3"
+          }
+        ],
+        "steps": [
+          {
+            "op": "reduction",
+            "args": [
+              "i24",
+              "i25"
+            ],
+            "out": "intensity_reduction"
+          },
+          {
+            "op": "multiply",
+            "args": [
+              "i24",
+              "u24"
+            ],
+            "out": "e24"
+          },
+          {
+            "op": "multiply",
+            "args": [
+              "i25",
+              "u25"
+            ],
+            "out": "e25"
+          },
+          {
+            "op": "pct_change",
+            "args": [
+              "e24",
+              "e25"
+            ],
+            "out": "total_change"
+          }
+        ],
+        "outputs": {
+          "intensity_reduction": "40.0",
+          "e24": "10000",
+          "e25": "12000",
+          "total_change": "20.0"
+        },
+        "units": {
+          "intensity_reduction": "%",
+          "e24": "kg CO2e",
+          "e25": "kg CO2e",
+          "total_change": "%"
+        },
+        "lineage": [
+          "grp-002f685402ae",
+          "grp-28ba2c2213b9"
+        ],
+        "note": "totals from reported intensity and output",
+        "round": 1,
+        "claim_output": "total_change",
+        "claim_expected": "-40",
+        "claim_relation": "disagrees"
+      },
+      "evidence_id": null,
+      "group_ids": []
+    }
+  ],
+  "scripted_scores": {
+    "fictional-doc-cc1c21f52b9abc84-s1-c0-e0": 1.5,
+    "fictional-doc-cc1c21f52b9abc84-s1-c0-e3": 1.5,
+    "fictional-doc-cc1c21f52b9abc84-s1-c0-e1": 1.5,
+    "fictional-doc-cc1c21f52b9abc84-s1-c0-e2": 0.25
+  },
+  "source": "Fictional emissions example run with the scripted test provider. Scores are synthetic.",
+  "is_synthetic_example": true
+}
