@@ -104,6 +104,47 @@ Each prediction records calls by provider and purpose, failed calls, tokens by m
 passages excluded by the router, and compression fallbacks. For a compression comparison, use
 the same searchable file for both systems so that retrieval is the same.
 
+## Comparison with single-prompt systems
+
+    uv run --env-file .env python -m evaluation.comparison.run --out results/comparison.json
+    uv run --env-file .env python -m evaluation.comparison.run --arms pipeline chatgpt \
+        --repeats 3 --out results/comparison_repeats.json
+
+Three arms audit the same cases:
+
+- `pipeline`: the structured investigation in this repository.
+- `chatgpt`: one call to the same OpenAI reasoning model, at the same reasoning effort, with the
+  prompt in `evaluation/comparison/schema.py`. It has no tools and no browsing, because every
+  case supplies its documents.
+- `devin`: one Devin session per case through the v3 API with the same prompt, a required
+  structured output, and an ACU limit per session (`--devin-max-acu`, default 5). It needs
+  `DEVIN_API_KEY` (a service-user key, prefix `cog_`) and `DEVIN_ORG_ID` (`org-...`). Without
+  both, the arm is reported as not run.
+
+Conditions that are the same for every arm: the passages, which are parsed once by this
+repository's parser and given with their document ids; the output format; the status definitions;
+and the rules about exact quotes and about not stating a probability. No arm is given a case's
+expected answer. The cases are synthetic, use fictional companies, and supply all their
+documents, so retrieval from the web is not compared.
+
+`evaluation/comparison/cases.json` holds the cases. Each was written with an expected status and
+was kept only if three solvers, who were not shown the expected answer, each gave an accepted
+status and at least two of them reached every key number.
+
+The scorer is code. Per case it records whether the claim was found, whether the status is one of
+the accepted ones, whether each key number was computed, how many evidence quotes are exact
+substrings of a supplied passage, which numbers in the summary or rewrite appear in no passage
+and in no reference calculation (listed, not judged, because they can be correct arithmetic),
+whether a probability was stated, and how many other findings were returned. With `--repeats`
+above 1 it records the share of cases that got the same status in every repeat. Cost is reported
+as OpenAI calls and tokens, Devin ACUs, and seconds. A case in which an arm failed to run is
+counted and left out of that arm's rates.
+
+Limits of this comparison: the cases are small and synthetic, the passages come from this
+repository's parser, the prompt for the other two arms was written here, and the pipeline's own
+rules (exact quotes, the number rule) match what the scorer checks. A result on these cases says
+how the systems behave on this kind of input. It is not a measurement on real disclosures.
+
 ## Report
 
     uv run python -m evaluation.report results --out results/report.md
