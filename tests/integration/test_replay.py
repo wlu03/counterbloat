@@ -1,4 +1,5 @@
 """A stored investigation is exported, replayed under every strategy, and compared across variants."""
+import json
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,7 @@ from backend.ingestion.snapshot import admit
 from backend.models import EvidenceStatus, InvestigationState, Mode, Relationship, RunManifest
 from backend.orchestration.worker import Deps, run_analysis
 from backend.retrieval.memory import MemoryIndex
+from evaluation.report import build
 from evaluation.replay.run import STRATEGIES, replay, run_all
 from evaluation.replay.scripted import ScriptedLLM
 from evaluation.replay.trace import Event, Trace, export_trace
@@ -92,3 +94,14 @@ def test_evidence_without_a_usable_score_does_not_count_against_the_claim():
     result = _accumulator(trace, 0.3)
     assert result["final_score"] == pytest.approx(0.3)
     assert "no recorded score" in result["errors"][0]
+
+
+def test_the_report_marks_missing_scores_as_unavailable(tmp_path):
+    trace = Trace.model_validate_json((FIXTURES / "mechanics.json").read_text())
+    result = run_all(trace, STRATEGIES, "scripted", seed=7, permutations=1, max_calls=0,
+                     prior=0.2, tempering=1.0)
+    (tmp_path / "replay.json").write_text(json.dumps(result, default=str))
+    report = build(tmp_path)
+    assert "| linguistic | contradicted | unavailable |" in report
+    assert "| evidence_accumulator | contradicted | 0.3333 |" in report
+    assert "synthetic example" in report
