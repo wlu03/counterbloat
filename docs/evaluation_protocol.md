@@ -122,8 +122,11 @@ Three arms audit the same cases:
   both, the arm is reported as not run.
 
 Conditions that are the same for every arm: the passages, which are parsed once by this
-repository's parser and given with their document ids; the output format; the status definitions;
-and the rules about exact quotes and about not stating a probability. No arm is given a case's
+repository's parser and given with their document ids, and the output format. The two
+single-prompt arms get the status definitions and the rules (exact quotes, arithmetic, no
+probability) in their prompt. The pipeline does not get that prompt: its own prompts name the
+statuses, and its rules are enforced in code. It runs with `config/evaluation.yaml`: frozen mode,
+two investigation rounds, one follow-up round, no Jev routing, no compression. No arm is given a case's
 expected answer. The cases are synthetic, use fictional companies, and supply all their
 documents, so retrieval from the web is not compared.
 
@@ -131,14 +134,28 @@ documents, so retrieval from the web is not compared.
 was kept only if three solvers, who were not shown the expected answer, each gave an accepted
 status and at least two of them reached every key number.
 
-The scorer is code. Per case it records whether the claim was found, whether the status is one of
-the accepted ones, whether each key number was computed, how many evidence quotes are exact
+The scorer is code. Per case it records whether the claim was found (the finding whose quote
+covers most of the expected claim text), whether the status is one of the accepted ones, whether
+each key number was calculated, how many evidence quotes are exact
 substrings of a supplied passage, which numbers in the summary or rewrite appear in no passage
 and in no reference calculation (listed, not judged, because they can be correct arithmetic),
 whether a probability was stated, and how many other findings were returned. With `--repeats`
 above 1 it records the share of cases that got the same status in every repeat. Cost is reported
-as OpenAI calls and tokens, Devin ACUs, and seconds. A case in which an arm failed to run is
-counted and left out of that arm's rates.
+as OpenAI calls and tokens, Devin sessions and ACUs, and seconds, and it includes runs that
+failed. A key number counts when it is among the calculated values, where a share given as a
+fraction of 1 counts as its percentage. In the summary or rewrite it counts only when the
+documents do not contain that number, because restating the claim is not a calculation.
+
+Two kinds of failure are kept apart. A system that ran and gave no usable answer (the pipeline
+job failed, or a Devin session timed out, ended without structured output, or returned another
+format) is scored as a miss. A system that could not be run (an outage, a missing key, the call
+budget) is counted and left out of that arm's rates. A pipeline run in which one provider call
+failed is scored as returned and counted as a partial run. A Devin session that times out is
+stopped through the API.
+
+`--reuse EARLIER.json` takes the arms that are not run now from an earlier result and scores
+their stored outputs again, so the Devin arm can be added later and a scorer change needs no
+new paid run.
 
 Limits of this comparison: the cases are small and synthetic, the passages come from this
 repository's parser, the prompt for the other two arms was written here, and the pipeline's own

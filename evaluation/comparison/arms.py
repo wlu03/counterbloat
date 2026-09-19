@@ -27,6 +27,19 @@ from evaluation.comparison.schema import (
 )
 
 DEVIN_API = "https://api.devin.ai/v3/organizations"
+POLL_FAILURES_ALLOWED = 5  # consecutive failed status requests before a session is given up
+
+
+class NoAnswer(Exception):
+    """The system ran and returned nothing usable. It is scored as a miss and its cost counts.
+
+    A ProviderError, by contrast, means the system could not be run: an outage, a missing key, or
+    the call budget. Those cases are left out of the rates.
+    """
+
+    def __init__(self, message: str, usage: dict) -> None:
+        super().__init__(message)
+        self.usage = usage
 
 
 class Prepared:
@@ -53,7 +66,7 @@ class Prepared:
 
 def _usage(manifest: RunManifest) -> dict:
     calls = [c for c in manifest.calls if c.provider == "openai"]
-    return {"calls": len(calls), "input_tokens": sum(c.input_tokens for c in calls),
+    return {"calls": len(calls), "partial": bool(manifest.errors), "input_tokens": sum(c.input_tokens for c in calls),
             "output_tokens": sum(c.output_tokens for c in calls), "errors": manifest.errors}
 
 
@@ -65,8 +78,9 @@ def pipeline(prepared: Prepared, llm_factory: Callable, settings: Settings) -> t
                              settings=settings))
     manifest = RunManifest.model_validate(store.get("manifests", "run"))
     job = store.get("analyses", "run") or {}
-    if job.get("status") != "complete" or job.get("partial"):
-        raise ProviderError(f"pipeline run was {job.get('status')}: {manifest.errors}")
+    if job.get("status") != "complete":
+        # The job stopped on an error of its own. That is a result of the system, not an outage.
+        raise NoAnswer(f"pipeline run was {job.get('status')}: {manifest.errors}", _usage(manifest))
     states = {s.claim.id: s for s in store.find("states", InvestigationState, analysis_id="run")}
     findings = []
     for finding in store.find("findings", Finding, analysis_id="run"):
@@ -116,31 +130,46 @@ def devin(prepared: Prepared, client: httpx.Client | None = None, max_acu: int =
             "structured_output_schema": _inlined(AuditOutput.model_json_schema())}
     started = time.monotonic()
     try:
+        # Not retried: a second request could start a second paid session.
         created = client.post(f"{DEVIN_API}/{org}/sessions", json=body, headers=headers)
         created.raise_for_status()
         session_id = created.json()["session_id"]
-        while True:
+    except (httpx.HTTPError, KeyError, ValueError, TypeError) as exc:
+        raise ProviderError(f"devin session could not be created: {exc}") from exc
+    session: dict = {"status": "new"}
+    failures, timed_out = 0, False
+    while True:
+        try:
             answer = client.get(f"{DEVIN_API}/{org}/sessions/{session_id}", headers=headers)
             answer.raise_for_status()
-            session = answer.json()
-            # A running session with no detail yet has only just started, so it is still waited for.
-            waiting = session["status"] in ("new", "claimed", "resuming") or (
-                session["status"] == "running"
-                and session.get("status_detail") in (None, "working"))
-            if not waiting:
-                break
-            if time.monotonic() - started > timeout_s:
-                raise ProviderError(f"devin session {session_id} did not finish in {timeout_s} s")
-            sleep(poll_s)
-    except (httpx.HTTPError, KeyError) as exc:
-        raise ProviderError(f"devin request failed: {exc}") from exc
-    usage = {"calls": 1, "acus": session.get("acus_consumed"), "session_url": session.get("url"),
-             "errors": []}
+            session, failures = answer.json(), 0
+        except (httpx.HTTPError, ValueError) as exc:
+            # One failed status request does not end a paid session. Several in a row do.
+            failures += 1
+            if failures > POLL_FAILURES_ALLOWED:
+                raise ProviderError(f"devin session {session_id} could not be read: {exc}") from exc
+        # A running session with no detail yet has only just started, so it is still waited for.
+        waiting = failures > 0 or session["status"] in ("new", "claimed", "resuming") or (
+            session["status"] == "running" and session.get("status_detail") in (None, "working"))
+        if not waiting:
+            break
+        if time.monotonic() - started > timeout_s:
+            timed_out = True
+            try:  # stop the session, so that it does not go on spending up to its ACU limit
+                client.delete(f"{DEVIN_API}/{org}/sessions/{session_id}", headers=headers)
+            except httpx.HTTPError:
+                pass
+            break
+        sleep(poll_s)
+    usage = {"sessions": 1, "acus": session.get("acus_consumed"),
+             "session_url": session.get("url"), "errors": []}
+    if timed_out:
+        raise NoAnswer(f"devin session {session_id} did not finish in {timeout_s} s", usage)
     if not session.get("structured_output"):
-        raise ProviderError(f"devin session {session_id} ended without structured output: "
-                            f"{session['status']} {session.get('status_detail')}")
+        raise NoAnswer(f"devin session {session_id} ended without structured output: "
+                       f"{session['status']} {session.get('status_detail')}", usage)
     try:
         return AuditOutput.model_validate(session["structured_output"]), usage
     except ValidationError as exc:
-        raise ProviderError(f"devin session {session_id} returned output in another format: "
-                            f"{exc.error_count()} errors") from exc
+        raise NoAnswer(f"devin session {session_id} returned output in another format: "
+                       f"{exc.error_count()} errors", usage) from exc

@@ -3,7 +3,9 @@
 Usage: uv run --env-file .env python -m evaluation.comparison.run --out results/comparison.json
            [--arms pipeline chatgpt devin] [--only CASE_ID ...] [--repeats 1]
            [--updater linguistic] [--max-calls 50000] [--devin-max-acu 5]
-           [--devin-timeout 1800] [--devin-parallel 4]
+           [--devin-timeout 1800] [--devin-parallel 4] [--reuse EARLIER.json]
+
+With --arms [] and --reuse, nothing is run and the stored outputs are scored again.
 
 Every arm reads the same parsed passages and returns the same output format. The scorer is code:
 it reads each case's expected answer, which no arm is given. The pipeline and chatgpt arms make
@@ -27,7 +29,7 @@ from backend.orchestration.worker import current_commit
 from backend.providers.base import ProviderError
 from evaluation.budget import Budgeted
 from evaluation.comparison import arms
-from evaluation.comparison.schema import PROMPT, Case
+from evaluation.comparison.schema import PROMPT, AuditOutput, Case
 from evaluation.comparison.score import score, summarise
 
 ARMS = ["pipeline", "chatgpt", "devin"]
@@ -40,26 +42,53 @@ def load_cases(path: str | Path = CASES, only: list[str] | None = None) -> list[
 
 
 def _one(name: str, case: Case, repeat: int, call: Callable) -> dict:
-    """Run one arm on one case and score it. A provider failure is recorded, not scored."""
-    prepared = arms.Prepared(case)
+    """Run one arm on one case and score it.
+
+    A system that ran and gave no usable answer is scored as a miss. A system that could not be
+    run (an outage, a missing key, the call budget) is recorded and left out of the rates.
+    """
     started = time.monotonic()
     row = {"case": case.id, "category": case.category, "repeat": repeat, "error": None,
            "usage": {}}
     try:
-        output, row["usage"] = call(prepared)
+        prepared = arms.Prepared(case)
+        try:
+            output, row["usage"] = call(prepared)
+        except arms.NoAnswer as exc:
+            output, row["usage"], row["no_answer"] = AuditOutput(findings=[]), exc.usage, str(exc)
         row.update(score(case, prepared.passages, output), output=output.model_dump(mode="json"))
     except ProviderError as exc:
         row["error"] = str(exc)
+    except Exception as exc:  # one broken case must not end a run that has already been paid for
+        row["error"] = f"harness error: {exc!r}"
     row["seconds"] = round(time.monotonic() - started, 1)
     # One line per finished case, because a full run takes many minutes.
-    print(name, case.id, row.get("status") or row["error"], f"{row['seconds']} s", flush=True)
+    print(name, case.id, row.get("status") or row.get("no_answer") or row["error"],
+          f"{row['seconds']} s", flush=True)
     return row
 
 
+def rescore(rows: list[dict], cases: list[Case]) -> list[dict]:
+    """Score stored outputs again with the current scorer. No system is run."""
+    by_id = {c.id: c for c in cases}
+    fresh = []
+    for row in rows:
+        case = by_id.get(row["case"])
+        if case is not None and row.get("output") is not None and row["error"] is None:
+            passages = arms.Prepared(case).passages
+            row = {**row, **score(case, passages, AuditOutput.model_validate(row["output"]))}
+        fresh.append(row)
+    return fresh
+
+
 def run(cases: list[Case], names: list[str], repeats: int, make_llm: Callable, settings: Settings,
-        max_calls: int, devin_options: dict | None = None, devin_parallel: int = 4) -> dict:
+        max_calls: int, devin_options: dict | None = None, devin_parallel: int = 4,
+        reuse: dict | None = None) -> dict:
+    """`reuse` is an earlier result. Arms that are not run now are taken from it and rescored."""
     left = max_calls
-    result: dict = {}
+    result: dict = {name: {**arm, "rows": rescore(arm["rows"], cases)}
+                    for name, arm in ((reuse or {}).get("arms") or {}).items()
+                    if name not in names and arm.get("available")}
     jobs = [(case, repeat) for case in cases for repeat in range(repeats)]
     for name in (n for n in names if n != "devin"):
         rows = []
@@ -123,7 +152,9 @@ def markdown(result: dict) -> str:
     for name, arm in result["arms"].items():
         if not arm["available"]:
             lines += [f"The {name} arm did not run: {arm['reason']}.", ""]
-    rows = [("cases run", "cases_run"), ("cases failed to run", "cases_failed"),
+    rows = [("cases run", "cases_run"), ("cases that could not be run", "cases_failed"),
+            ("runs that gave no usable answer (scored as misses)", "no_answer"),
+            ("runs with a failed provider call (scored as returned)", "partial_runs"),
             ("claim found (share of cases)", "claim_found"),
             ("status correct (share of cases)", "status_correct"),
             ("key numbers computed (share of key numbers)", "key_numbers_found"),
@@ -134,7 +165,8 @@ def markdown(result: dict) -> str:
             ("findings other than the case's claim", "other_findings"),
             ("same status in every repeat (share of cases)", "same_status_across_repeats"),
             ("OpenAI calls", "calls"), ("input tokens", "input_tokens"),
-            ("output tokens", "output_tokens"), ("Devin ACUs", "acus"), ("seconds", "seconds")]
+            ("output tokens", "output_tokens"), ("Devin sessions", "sessions"),
+            ("Devin ACUs", "acus"), ("seconds", "seconds")]
     lines += ["| measure | " + " | ".join(names) + " |", "|---|" + "---|" * len(names)]
     lines += [f"| {label} | " + " | ".join(_cell(result["arms"][n]["summary"][key]) for n in names)
               + " |" for label, key in rows]
@@ -146,7 +178,7 @@ def markdown(result: dict) -> str:
         for name in names:
             given = [r for r in result["arms"][name]["rows"] if r["case"] == case_id]
             cells.append(", ".join(f"not run ({r['error'][:40]})" if r["error"] else
-                                   f"{r['status'] or 'claim not found'}"
+                                   f"{r['status'] or ('no answer' if r.get('no_answer') else 'claim not found')}"
                                    f" ({'correct' if r['status_correct'] else 'wrong'})"
                                    for r in given) or "not run")
         lines.append(f"| {case_id} | {case['category']} | {', '.join(case['accept'])} | "
@@ -158,7 +190,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", required=True)
-    parser.add_argument("--arms", nargs="+", choices=ARMS, default=ARMS)
+    parser.add_argument("--arms", nargs="*", choices=ARMS, default=ARMS)
     parser.add_argument("--cases", default=str(CASES))
     parser.add_argument("--only", nargs="+")
     parser.add_argument("--repeats", type=int, default=1)
@@ -167,6 +199,8 @@ def main() -> None:
     parser.add_argument("--devin-max-acu", type=int, default=5)
     parser.add_argument("--devin-timeout", type=int, default=1800)
     parser.add_argument("--devin-parallel", type=int, default=4)
+    parser.add_argument("--reuse", help="an earlier result: arms not run now are taken from it and "
+                                        "scored again with the current scorer")
     args = parser.parse_args()
     from backend.providers.openai_client import OpenAILLM
 
@@ -175,7 +209,7 @@ def main() -> None:
         settings.assessment.updater = args.updater
     result = run(load_cases(args.cases, args.only), args.arms, args.repeats, OpenAILLM, settings,
                  args.max_calls, {"max_acu": args.devin_max_acu, "timeout_s": args.devin_timeout},
-                 args.devin_parallel)
+                 args.devin_parallel, json.loads(Path(args.reuse).read_text()) if args.reuse else None)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result, indent=2, default=str))

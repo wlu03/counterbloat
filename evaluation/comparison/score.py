@@ -3,11 +3,14 @@ from __future__ import annotations
 
 import re
 from decimal import Decimal, InvalidOperation
+from difflib import SequenceMatcher
 
 from backend.models import SourceSpan
 from evaluation.comparison.schema import AuditOutput, Case
 
 TOLERANCE = Decimal("0.05")
+RATIO_UNITS = {"ratio", "fraction", "share", "proportion"}
+_IDS = re.compile(r"doc-[0-9a-f]{16}(?:-s\d+)?")  # passage ids contain digits that are not figures
 
 
 def _squash(text: str) -> str:
@@ -29,14 +32,33 @@ def _close(a: Decimal, b: Decimal) -> bool:
     return abs(abs(a) - abs(b)) <= TOLERANCE
 
 
+def _forms(number) -> list[Decimal]:
+    """A key number is written in percent. A share given as a fraction of 1 is the same result."""
+    value = _decimal(number.value)
+    if value is None:
+        return []
+    return [value, value * 100] if number.unit.strip().casefold() in RATIO_UNITS else [value]
+
+
+def _covered(quote: str, wanted: str) -> float:
+    """Share of the wanted claim text that the quote reproduces as one run of characters."""
+    match = SequenceMatcher(None, quote, wanted, autojunk=False).find_longest_match()
+    return match.size / len(wanted)
+
+
 def score(case: Case, passages: dict[str, list[SourceSpan]], output: AuditOutput) -> dict:
     expected = case.expected
     wanted = _squash(expected.claim_contains)
-    finding = next((f for f in output.findings if wanted in _squash(f.claim_quote)
-                    or (len(f.claim_quote) > 20 and _squash(f.claim_quote) in wanted)), None)
+    keys = [k for k in map(_decimal, expected.key_numbers) if k is not None]
+    # The finding about the case's claim is the one whose quote covers most of the claim text.
+    # A quote that starts or ends elsewhere in the same sentence still counts.
+    ranked = sorted(output.findings, key=lambda f: _covered(_squash(f.claim_quote), wanted),
+                    reverse=True)
+    finding = ranked[0] if ranked and _covered(_squash(ranked[0].claim_quote), wanted) >= 0.6 else None
     result = {"claim_found": finding is not None, "status": finding.status if finding else None,
               "status_correct": bool(finding) and finding.status in expected.accept_statuses,
-              "other_findings": len(output.findings) - (1 if finding else 0)}
+              "other_findings": len(output.findings) - (1 if finding else 0),
+              "key_numbers": len(keys), "key_numbers_found": 0}
     if finding is None:
         return result
     texts = {d: [_squash(s.text) for s in spans] for d, spans in passages.items()}
@@ -45,15 +67,22 @@ def score(case: Case, passages: dict[str, list[SourceSpan]], output: AuditOutput
     # the named document is not one of the supplied ones, every supplied passage is searched.
     exact = [any(_squash(q.quote) in t for t in texts.get(q.document_id, everything))
              for q in finding.evidence if q.quote.strip()]
-    stated = _numbers(f"{finding.summary} {finding.supported_rewrite or ''}")
-    computed = [v for v in (_decimal(n.value) for n in finding.computed) if v is not None]
-    allowed = [n for t in everything for n in _numbers(t)] + [
-        v for v in map(_decimal, expected.derived_numbers + expected.key_numbers) if v is not None]
-    keys = [k for k in map(_decimal, expected.key_numbers) if k is not None]
+    stated = _numbers(_IDS.sub(" ", f"{finding.summary} {finding.supported_rewrite or ''}"))
+    computed = [v for n in finding.computed for v in _forms(n)]
+    in_documents = [n for t in everything for n in _numbers(t)]
+    reference = [v for v in map(_decimal, expected.derived_numbers + expected.key_numbers)
+                 if v is not None]
+    allowed = in_documents + reference + [v / 100 for v in reference]
+
+    def reached(key: Decimal) -> bool:
+        # A key number counts when it was calculated. In the text it counts only when it is a
+        # number the documents do not contain, because restating the claim is not a calculation.
+        written = not any(_close(key, n) for n in in_documents)
+        return any(_close(key, n) for n in computed) or (written and any(_close(key, n) for n in stated))
+
     result.update(
         quotes=len(exact), quotes_exact=sum(exact),
-        key_numbers=len(keys),
-        key_numbers_found=sum(any(_close(k, n) for n in computed + stated) for k in keys),
+        key_numbers_found=sum(map(reached, keys)),
         # Numbers in the text that are in no passage and not among the reference calculations.
         # They may be correct arithmetic the reference did not list, so they are listed, not judged.
         unverified_numbers=sorted({str(n) for n in stated if not any(_close(n, a) for a in allowed)}),
@@ -85,8 +114,12 @@ def summarise(rows: list[dict]) -> dict:
             # Share of repeated cases in which every repeat gave the same status.
             "same_status_across_repeats": (sum(len(s) == 1 for s in repeated) / len(repeated)
                                            if repeated else None),
-            "calls": sum(r["usage"].get("calls", 0) for r in ran),
-            "input_tokens": sum(r["usage"].get("input_tokens", 0) for r in ran),
-            "output_tokens": sum(r["usage"].get("output_tokens", 0) for r in ran),
-            "acus": sum(r["usage"].get("acus") or 0 for r in ran) or None,
-            "seconds": round(sum(r["seconds"] for r in ran), 1)}
+            "no_answer": sum(bool(r.get("no_answer")) for r in ran),
+            "partial_runs": sum(bool(r["usage"].get("partial")) for r in ran),
+            # Cost covers every row, also the ones that failed, because they were paid for.
+            "calls": sum(r["usage"].get("calls", 0) for r in rows),
+            "input_tokens": sum(r["usage"].get("input_tokens", 0) for r in rows),
+            "output_tokens": sum(r["usage"].get("output_tokens", 0) for r in rows),
+            "sessions": sum(r["usage"].get("sessions", 0) for r in rows),
+            "acus": sum(r["usage"].get("acus") or 0 for r in rows) or None,
+            "seconds": round(sum(r["seconds"] for r in rows), 1)}
