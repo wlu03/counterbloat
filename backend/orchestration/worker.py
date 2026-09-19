@@ -104,7 +104,7 @@ def _calculations(analysis: EvidenceAnalysis, state: InvestigationState,
 def investigate(analysis_id: str, claim: Claim, deps: Deps, llm: LLM, manifest: RunManifest,
                 mode: Mode, cutoff: datetime | None) -> tuple[InvestigationState, dict[str, SourceSpan]]:
     store, settings = deps.store, deps.settings
-    state = InvestigationState(claim=claim, questions=plan(claim, llm))
+    state = InvestigationState(claim=claim, questions=plan(claim, llm, manifest))
     seen: dict[str, SourceSpan] = {}
     corpus = None
     if mode != Mode.live:
@@ -207,12 +207,12 @@ def run_analysis(analysis_id: str, deps: Deps) -> None:
             if state.stop_reason == "cancelled":
                 save("cancelled", partial=True)
                 return
-            finding = finalize(state, seen, llm, cutoff)
+            finding = finalize(state, seen, llm, cutoff, manifest)
             store.put("findings", finding.finding_id, finding, analysis_id=analysis_id,
                       claim_id=claim.id)
             save("running", claims_done=done)
         # Operational errors mean some work did not run, so the result is labelled partial.
         save("complete", partial=bool(manifest.errors))
     except Exception as exc:  # store status 'failed' so the job is not reported as complete
-        manifest.errors.append(f"analysis failed: {exc}")
+        manifest.errors.append(f"analysis failed: {exc!r}")
         save("failed", partial=True)

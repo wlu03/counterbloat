@@ -17,7 +17,7 @@ def _numbers(text: str) -> set[str]:
 
 def valid(draft: ClaimDraft, span: SourceSpan) -> bool:
     """The quote must be verbatim, and every number in a stated value must be a number in it."""
-    if not draft.quote or draft.quote not in span.text:
+    if not draft.quote.strip() or draft.quote not in span.text:
         return False
     if draft.value and not _numbers(draft.value) <= _numbers(draft.quote):
         return False

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from backend.models import AssertionType, Claim, VerificationQuestion
+from backend.models import AssertionType, Claim, RunManifest, VerificationQuestion
 from backend.providers.base import LLM, ProviderError
 
 VERSION = "checklists-v1"
@@ -62,14 +62,14 @@ def family(claim: Claim) -> str:
     return "product_attribute"
 
 
-def plan(claim: Claim, llm: LLM | None) -> list[VerificationQuestion]:
+def plan(claim: Claim, llm: LLM | None, manifest: RunManifest) -> list[VerificationQuestion]:
     checklist = CHECKLISTS[family(claim)]
     drafts = []
     if llm is not None:
         try:
             drafts = llm.plan_questions(claim, checklist)
-        except ProviderError:
-            drafts = []  # the checklist alone is still a usable plan
+        except ProviderError as exc:
+            manifest.errors.append(str(exc))  # the checklist alone is still a usable plan
     if not drafts:
         return [VerificationQuestion(id=f"{claim.id}-q{i}", claim_id=claim.id, text=text,
                                      critical=i == 0) for i, text in enumerate(checklist)]

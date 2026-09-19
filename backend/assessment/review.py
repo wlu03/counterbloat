@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from backend.belief.priority import critical_open
 from backend.models import (
-    EvidenceStatus, Finding, InvestigationState, ReviewState, SourceSpan, Uncertainty,
+    EvidenceStatus, Finding, InvestigationState, ReviewState, RunManifest, SourceSpan, Uncertainty,
 )
 from backend.providers.base import LLM, ProviderError, Report, ReviewResult
 from backend.verification.numeric import CalculationError, execute, value_in_source
@@ -49,7 +49,7 @@ def numbers_supported(text: str, state: InvestigationState, spans: dict[str, Sou
 
 
 def finalize(state: InvestigationState, spans: dict[str, SourceSpan], llm: LLM,
-             cutoff: datetime | None = None) -> Finding:
+             cutoff: datetime | None = None, manifest: RunManifest | None = None) -> Finding:
     claim = state.claim
     fallback = f"Assessment: {state.assessment.status}. See the evidence and calculations."
 
@@ -75,6 +75,8 @@ def finalize(state: InvestigationState, spans: dict[str, SourceSpan], llm: LLM,
         review: ReviewResult = llm.review(state, decisive)
         report: Report = llm.report(state, decisive)
     except ProviderError as exc:
+        if manifest is not None:
+            manifest.errors.append(str(exc))
         finding.uncertainty.measurement_limitations = [f"review did not run: {exc}"]
         return finding
     # Review reasons are model text, so they follow the same number rule as the summary.
@@ -85,7 +87,8 @@ def finalize(state: InvestigationState, spans: dict[str, SourceSpan], llm: LLM,
         finding.uncertainty.measurement_limitations = reasons
         return finding
     weaker = (EvidenceStatus.mixed, EvidenceStatus.insufficient, EvidenceStatus.not_yet_resolvable)
-    if review.decision == "narrow" and review.narrowed_status in weaker:
+    decided = finding.evidence_status in (EvidenceStatus.supported, EvidenceStatus.contradicted)
+    if review.decision == "narrow" and review.narrowed_status in weaker and decided:
         # A review can weaken a verdict. It cannot introduce supported or contradicted.
         finding.evidence_status = review.narrowed_status
     finding.summary = checked(report.summary)
