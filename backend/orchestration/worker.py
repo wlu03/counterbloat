@@ -18,6 +18,7 @@ from backend.models import (
     Calculation, CalcInput, Claim, DocumentSnapshot, EvidenceItem, InvestigationState, Mode,
     Relationship, RunManifest, SourceSpan,
 )
+from backend.planning import checklists
 from backend.planning.checklists import plan
 from backend.providers import prompts
 from backend.providers.base import LLM, Compressor, EvidenceAnalysis, ProviderError, Router
@@ -46,11 +47,17 @@ def _items(analysis: EvidenceAnalysis, state: InvestigationState, shown: dict[st
     claim = state.claim
     claim_fields = claim.model_dump(include=set(FIELDS))
     items, repeats = [], {}
+    known = {(e.span_id, e.target) for e in state.evidence}
     for judgment in analysis.judgments:
         span = shown.get(judgment.span_id)
-        if span is None or judgment.quote not in span.text:
+        if span is None or not judgment.quote.strip() or judgment.quote not in span.text:
             manifest.errors.append(f"rejected evidence with unverifiable quote: {judgment.span_id}")
             continue
+        if span.id == claim.span_id and (judgment.quote in claim.text or claim.text in judgment.quote):
+            continue  # the claim's own sentence is not evidence for the claim
+        if (span.id, judgment.target) in known:
+            continue  # already recorded, so every item built here is new and ids stay unique
+        known.add((span.id, judgment.target))
         found = differences(claim_fields, judgment.model_dump(include=set(FIELDS)))
         relationship, limitations = judgment.relationship, list(judgment.limitations)
         if found and relationship == Relationship.contradicts:
@@ -172,6 +179,7 @@ def run_analysis(analysis_id: str, deps: Deps) -> None:
 
     try:
         llm = deps.llm_factory(manifest)
+        manifest.models["checklists"] = checklists.VERSION
         spans = store.find("spans", SourceSpan, document_id=job["document_id"])
         router = deps.router if deps.settings.optimization.jev_routing else None
         claims = extract(spans, llm, router, manifest, set(job.get("selected_span_ids") or []),
@@ -192,11 +200,15 @@ def run_analysis(analysis_id: str, deps: Deps) -> None:
                           span_id=item.span_id)
             for calculation in state.calculations:
                 store.put("calculations", calculation.id, calculation, claim_id=claim.id)
+            if state.stop_reason == "cancelled":
+                save("cancelled", partial=True)
+                return
             finding = finalize(state, seen, llm, cutoff)
             store.put("findings", finding.finding_id, finding, analysis_id=analysis_id,
                       claim_id=claim.id)
             save("running", claims_done=done)
-        save("complete", partial=False)
-    except Exception as exc:  # a failed job must say so instead of looking finished
+        # Operational errors mean some work did not run, so the result is labelled partial.
+        save("complete", partial=bool(manifest.errors))
+    except Exception as exc:  # store status 'failed' so the job is not reported as complete
         manifest.errors.append(f"analysis failed: {exc}")
         save("failed", partial=True)

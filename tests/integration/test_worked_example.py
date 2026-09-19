@@ -80,3 +80,36 @@ def test_api_runs_an_analysis_and_requires_the_key(store, monkeypatch):
     assert "Supported wording" in export["markdown"] and export["manifest"]["mode"] == "frozen"
     reader = client.get(f"/documents/{document['id']}", headers=headers).json()
     assert reader["text"][claim["claim"]["start"]:claim["claim"]["end"]] == claim["claim"]["text"]
+
+
+def test_evidence_ids_stay_unique_when_a_judgment_is_repeated(store):
+    class Repeating(FakeLLM):
+        def analyze_evidence(self, claim, questions, context):
+            analysis = super().analyze_evidence(claim, questions, context)
+            analysis.judgments.insert(1, analysis.judgments[0])  # same passage and target twice
+            if self.analyze_calls == 1:
+                analysis.judgments.pop()                          # the note arrives in round two
+                analysis.answers.pop()
+            return analysis
+
+    deps = _deps(store)
+    deps.llm_factory = Repeating
+    _run(deps, [REPORT])
+    [state] = store.find("states", InvestigationState, analysis_id="an-1")
+    ids = [e.id for e in state.evidence]
+    assert len(ids) == len(set(ids)) == len(store.find("evidence", claim_id=state.claim.id))
+
+
+def test_cancel_during_the_only_claim_is_not_reported_complete(store):
+    class Cancelling(FakeLLM):
+        def plan_questions(self, claim, checklist):
+            job = store.get("analyses", "an-1")
+            job["cancel_requested"] = True
+            store.update("analyses", "an-1", job)
+            return []
+
+    deps = _deps(store)
+    deps.llm_factory = Cancelling
+    assert _run(deps, [REPORT]) == []
+    job = store.get("analyses", "an-1")
+    assert job["status"] == "cancelled" and job["partial"] is True
