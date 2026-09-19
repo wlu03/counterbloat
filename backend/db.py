@@ -49,6 +49,13 @@ class Store:
             conn.execute(t.delete().where(t.c.id == record_id))
             conn.execute(t.insert().values(id=record_id, data=payload, **keys))
 
+    def update(self, table: str, record_id: str, data: BaseModel | dict) -> None:
+        """Replace the record and leave its key columns as they are."""
+        payload = data.model_dump(mode="json") if isinstance(data, BaseModel) else data
+        t = TABLES[table]
+        with self.engine.begin() as conn:
+            conn.execute(t.update().where(t.c.id == record_id).values(data=payload))
+
     def get(self, table: str, record_id: str, model: type[T] | None = None) -> T | dict | None:
         t = TABLES[table]
         with self.engine.connect() as conn:
