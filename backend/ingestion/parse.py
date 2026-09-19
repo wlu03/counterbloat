@@ -15,6 +15,7 @@ from backend.models import SourceSpan, TableCell, TableRow
 
 PARSER_VERSION = "parse-v1"
 MAX_INFLATED = 200_000_000
+MAX_PASSAGE_CHARS = 800
 _DROP = ("script", "style", "noscript", "template", "iframe")
 # The font-size pattern matches 0, 0px, and 0.0em, and does not match 0.9em.
 _HIDDEN = re.compile(r"display\s*:\s*none|visibility\s*:\s*hidden|font-size\s*:\s*0(?![\d.]*[1-9])",
@@ -148,6 +149,21 @@ class _CappedZlib:
 Transcriber = Callable[[bytes], str]  # PNG bytes of one page to its text
 
 
+def _passages(text: str) -> list[str]:
+    """Split on blank lines, then split a long block at sentence ends."""
+    result = []
+    for block in re.split(r"\n\s*\n", text):
+        current = ""
+        for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z‘“\"(])", normalize(block)):
+            if current and len(current) + len(sentence) > MAX_PASSAGE_CHARS:
+                result.append(current)
+                current = ""
+            current = f"{current} {sentence}".strip()
+        if current:
+            result.append(current)
+    return result
+
+
 def _pdf_blocks(content: bytes, transcribe: Transcriber | None,
                 flags: list[str]) -> list[tuple[str, str, TableRow | None, int | None]]:
     import pdfplumber
@@ -157,7 +173,8 @@ def _pdf_blocks(content: bytes, transcribe: Transcriber | None,
     blocks = []
     with pdfplumber.open(io.BytesIO(content)) as pdf:
         for number, page in enumerate(pdf.pages, start=1):
-            text = page.extract_text() or ""
+            # Text flow follows the order in the file, which keeps the columns of a page apart.
+            text = page.extract_text(use_text_flow=True) or ""
             if not text.strip() and transcribe is not None:
                 # The page is an image. Text read from it by a model is flagged, because a
                 # quote from it has not been checked against a text layer.
@@ -166,9 +183,7 @@ def _pdf_blocks(content: bytes, transcribe: Transcriber | None,
                 text = transcribe(picture.getvalue())
                 if "ocr_text" not in flags:
                     flags.append("ocr_text")
-            for paragraph in re.split(r"\n\s*\n", text):
-                if normalize(paragraph):
-                    blocks.append(("paragraph", normalize(paragraph), None, number))
+            blocks += [("paragraph", passage, None, number) for passage in _passages(text)]
     return blocks
 
 
@@ -181,8 +196,8 @@ def parse(document_id: str, content: bytes, media_type: str,
         if not blocks:
             flags.append("no_text_layer")
     elif media_type == "text/plain":
-        paragraphs = re.split(r"\n\s*\n", content.decode("utf-8", "replace"))
-        blocks = [("paragraph", normalize(p), None, None) for p in paragraphs if normalize(p)]
+        blocks = [("paragraph", passage, None, None)
+                  for passage in _passages(content.decode("utf-8", "replace"))]
     else:
         blocks = _html_blocks(content)
 

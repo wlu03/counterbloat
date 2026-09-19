@@ -103,3 +103,11 @@ def test_image_only_pdf_is_transcribed_and_flagged():
     text, spans, flags = parse("d", pdf, "application/pdf",
                                transcribe=lambda png: "Emissions fell 40% in 2025." if png[:4] == b"\x89PNG" else "")
     assert text == "Emissions fell 40% in 2025." and flags == ["ocr_text"] and spans[0].page == 1
+
+
+def test_long_plain_text_is_split_at_sentence_ends():
+    text = " ".join(f"Sentence number {i} states a figure of {i} percent." for i in range(60))
+    _, spans, _ = parse("d", text.encode(), "text/plain")
+    assert len(spans) > 1 and all(len(s.text) <= 850 for s in spans)
+    assert all(s.text.endswith(".") for s in spans)
+    assert " ".join(s.text for s in spans) == text
