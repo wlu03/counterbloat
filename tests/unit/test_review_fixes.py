@@ -49,10 +49,28 @@ class _Narrowing:
                       measurement_limitations=[], interpretation_ambiguity="")
 
 
-def test_review_cannot_strengthen_a_verdict():
+def _state_with_context():
     state = InvestigationState(claim=_claim())
-    finding = finalize(state, {}, _Narrowing())
+    reconcile(state, [_item(1, "s1", "Output doubled.", Relationship.context)], {})
+    spans = {"s1": SourceSpan(id="s1", document_id="d", kind="paragraph", text="Output doubled.",
+                              start=0, end=15)}
+    return state, spans
+
+
+def test_review_cannot_strengthen_a_verdict():
+    state, spans = _state_with_context()
+    finding = finalize(state, spans, _Narrowing())
     assert finding.evidence_status == EvidenceStatus.insufficient
+
+
+def test_a_claim_with_no_evidence_skips_the_review_calls():
+    class Unreachable:
+        def review(self, state, decisive):
+            raise AssertionError("review must not be called")
+
+    finding = finalize(InvestigationState(claim=_claim()), {}, Unreachable())
+    assert finding.evidence_status == EvidenceStatus.insufficient
+    assert finding.summary.startswith("No evidence")
 
 
 def test_repeat_is_grouped_with_its_original_in_either_order():
@@ -115,5 +133,6 @@ class _Inventing(_Narrowing):
 
 
 def test_summary_with_numbers_no_calculation_produced_is_replaced():
-    finding = finalize(InvestigationState(claim=_claim()), {}, _Inventing())
+    state, spans = _state_with_context()
+    finding = finalize(state, spans, _Inventing())
     assert "10,000" not in finding.summary and finding.summary.startswith("Assessment:")

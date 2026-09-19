@@ -70,6 +70,10 @@ def finalize(state: InvestigationState, spans: dict[str, SourceSpan], llm: LLM,
         finding.review_status = ReviewState.blocked
         finding.uncertainty.measurement_limitations = errors
         return finding
+    if not state.evidence and not state.calculations:
+        # Nothing was admitted, so there is nothing to review and no wording to propose.
+        finding.summary = "No evidence for this claim was found in the allowed sources."
+        return finding
     decisive = [spans[e.span_id] for e in state.evidence if e.span_id in spans]
     try:
         review: ReviewResult = llm.review(state, decisive)
