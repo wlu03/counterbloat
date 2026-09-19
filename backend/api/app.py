@@ -13,7 +13,7 @@ from backend.db import Store
 from backend.ingestion.fetch import BlockedDestination, FetchError
 from backend.ingestion.snapshot import admit, admit_url, normalized_text
 from backend.models import (
-    BeliefUpdate, Calculation, Claim, DocumentSnapshot, EvidenceItem, Finding, InvestigationState, Mode,
+    BeliefUpdate, Claim, DocumentSnapshot, EvidenceItem, Finding, InvestigationState, Mode,
     ReviewState, SourceSpan,
 )
 from backend.orchestration.worker import Deps, run_analysis
@@ -159,7 +159,8 @@ def create_app(deps: Deps | None = None) -> FastAPI:
                 "withdrawn": latest.withdrawn if latest else [],
                 "groups": latest.groups if latest else [],
                 "coverage": coverage(latest.questions) if latest else 0.0,
-                "calculations": d.store.find("calculations", Calculation, claim_id=claim_id),
+                # Taken from the state, which drops a calculation when its inputs are withdrawn.
+                "calculations": latest.calculations if latest else [],
                 "stop_reason": latest.stop_reason if latest else None}
 
     @app.get("/evidence/{evidence_id}", dependencies=guard)

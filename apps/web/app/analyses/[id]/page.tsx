@@ -6,7 +6,8 @@ import { EvidenceDrawer } from "@/components/EvidenceDrawer";
 import { FindingPanel } from "@/components/FindingPanel";
 import { InvestigationView } from "@/components/InvestigationView";
 import { Reader } from "@/components/Reader";
-import { api, type ClaimDetail, type Finding, type Span } from "@/lib/api";
+import { ResearchPanel } from "@/components/ResearchPanel";
+import { api, type ClaimDetail, type Finding, type Research, type Span, type Update } from "@/lib/api";
 
 type Job = { id: string; document_id: string; status: string; errors: string[]; partial?: boolean };
 
@@ -16,7 +17,8 @@ export default function AnalysisPage() {
   const [spans, setSpans] = useState<Span[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [details, setDetails] = useState<Record<string, ClaimDetail>>({});
-  const [updates, setUpdates] = useState<Record<string, never[]>>({});
+  const [updates, setUpdates] = useState<Record<string, Update[]>>({});
+  const [research, setResearch] = useState<Record<string, Research>>({});
   const [selected, setSelected] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,9 +33,15 @@ export default function AnalysisPage() {
       setFindings(found);
       for (const finding of found) {
         const detail = await api<ClaimDetail>(`claims/${finding.claim_id}`);
-        const history = await api<never[]>(`claims/${finding.claim_id}/updates`);
+        const history = await api<Update[]>(`claims/${finding.claim_id}/updates`);
         setDetails((d) => ({ ...d, [finding.claim_id]: detail }));
         setUpdates((u) => ({ ...u, [finding.claim_id]: history }));
+        // The server answers 404 when the research view is disabled. Any failure of this one
+        // request means the panel is not shown.
+        try {
+          const scores = await api<Research>(`claims/${finding.claim_id}/research`);
+          setResearch((r) => ({ ...r, [finding.claim_id]: scores }));
+        } catch { /* research view not available */ }
       }
       if (current.status === "queued" || current.status === "running") timer = setTimeout(load, 2000);
     }
@@ -55,8 +63,8 @@ export default function AnalysisPage() {
         <aside>
           {finding ? <FindingPanel finding={finding} /> : <p>No findings yet.</p>}
           {detail && <EvidenceDrawer evidence={detail.evidence} calculations={detail.calculations} />}
-          {detail && <InvestigationView questions={detail.questions} coverage={detail.coverage}
-            updates={updates[finding!.claim_id] ?? []} stopReason={detail.stop_reason} />}
+          {detail && <InvestigationView detail={detail} updates={updates[finding!.claim_id] ?? []} />}
+          {finding && research[finding.claim_id] && <ResearchPanel research={research[finding.claim_id]} />}
         </aside>
       </div>
     </main>

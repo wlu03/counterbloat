@@ -15,8 +15,15 @@ mark .status { font: 11px system-ui, sans-serif; margin-left: 6px; text-transfor
 aside { font-family: system-ui, sans-serif; font-size: 14px; }
 aside section { border: 1px solid var(--line); background: white; padding: 14px; margin-bottom: 16px; }
 aside h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; }
+aside h4 { margin: 14px 0 4px; font-size: 13px; }
 .status-label { font-weight: 600; }
 blockquote { margin: 8px 0; padding-left: 10px; border-left: 3px solid var(--line); }
 .link { background: none; border: none; color: var(--accent); padding: 0; text-decoration: underline; }
 ul { padding-left: 18px; margin: 6px 0; }
+/* Internal research scores. Dashed and muted so the panel is not read as part of the finding. */
+aside .research { border: 1px dashed #8a8579; background: #f1eee6; color: #444; }
+.research table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.research caption { text-align: left; font-weight: 600; padding-bottom: 4px; }
+.research th, .research td { text-align: left; vertical-align: top; padding: 3px 8px 3px 0;
+  border-bottom: 1px solid var(--line); }
 @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
