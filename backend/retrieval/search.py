@@ -6,7 +6,7 @@ from typing import Protocol
 
 from backend.config import Retrieval
 from backend.db import Store
-from backend.models import Claim, DocumentSnapshot, SourceSpan, VerificationQuestion
+from backend.models import Claim, DocumentSnapshot, RunManifest, SourceSpan, VerificationQuestion
 from backend.retrieval.rrf import fuse
 
 
@@ -18,17 +18,23 @@ class SearchIndex(Protocol):
 
 def retrieve(index: SearchIndex, store: Store, claim: Claim,
              questions: list[VerificationQuestion], settings: Retrieval,
-             corpus: list[str] | None = None,
-             cutoff: datetime | None = None) -> tuple[list[SourceSpan], list[SourceSpan]]:
+             corpus: list[str] | None = None, cutoff: datetime | None = None,
+             manifest: RunManifest | None = None) -> tuple[list[SourceSpan], list[SourceSpan]]:
     """Return (retrieved passages, neighbouring context passages)."""
+    def search(query: str) -> list[str]:
+        found = index.search(query, size=settings.candidates_per_query, corpus=corpus, cutoff=cutoff)
+        used = getattr(index, "used_embeddings", None)
+        if manifest is not None and used is not None:
+            # True only while every search of the analysis has used vectors.
+            manifest.embedding_search = used and manifest.embedding_search is not False
+        return found
+
     exact = " ".join(filter(None, [claim.subject, claim.metric, claim.period, claim.unit]))
     hits: list[str] = []
     for question in questions:
-        rankings = [index.search(f"{question.text} {question.evidence_needed}",
-                                 size=settings.candidates_per_query, corpus=corpus, cutoff=cutoff)]
+        rankings = [search(f"{question.text} {question.evidence_needed}")]
         if exact:
-            rankings.append(index.search(exact, size=settings.candidates_per_query,
-                                         corpus=corpus, cutoff=cutoff))
+            rankings.append(search(exact))
         hits += fuse(rankings)[:settings.retained_passages_per_question]
     hit_ids = list(dict.fromkeys(hits))
     passages = [s for s in (store.get("spans", i, SourceSpan) for i in hit_ids) if s]

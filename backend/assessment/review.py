@@ -66,9 +66,10 @@ def finalize(state: InvestigationState, spans: dict[str, SourceSpan], llm: LLM,
              review: ReviewResult | None, cutoff: datetime | None = None,
              manifest: RunManifest | None = None) -> Finding:
     claim = state.claim
-    fallback = f"Assessment: {state.assessment.status}. See the evidence and calculations."
 
     def checked(text: str) -> str:
+        # The fixed sentence names the status at the time it is used, after any review.
+        fallback = f"Assessment: {state.assessment.status}. See the evidence and calculations."
         return text if text and numbers_supported(text, state, spans) else fallback
 
     finding = Finding(finding_id=f"{claim.id}-f{state.version}", claim_id=claim.id,
@@ -101,8 +102,11 @@ def finalize(state: InvestigationState, spans: dict[str, SourceSpan], llm: LLM,
         state.assessment = Assessment(status=EvidenceStatus.insufficient,
                                       summary="Review rejected the proposed conclusion.")
     elif review.decision == "narrow" and review.narrowed_status in weaker and decided:
-        # A review can weaken a verdict. It cannot introduce supported or contradicted.
-        state.assessment.status = review.narrowed_status
+        # A review can weaken a verdict. It cannot introduce supported or contradicted. The
+        # summary and mechanisms of the earlier verdict no longer describe the assessment.
+        mechanisms = state.assessment.mechanisms if review.narrowed_status == EvidenceStatus.mixed else []
+        state.assessment = Assessment(status=review.narrowed_status, mechanisms=mechanisms)
+        finding.summary = checked("")
     finding.evidence_status = state.assessment.status
     finding.mechanisms = state.assessment.mechanisms
     if review.decision == "reject":
@@ -110,15 +114,18 @@ def finalize(state: InvestigationState, spans: dict[str, SourceSpan], llm: LLM,
         finding.uncertainty.measurement_limitations = reasons
         return finding
     if review.decision == "request_check":
-        finding.uncertainty.critical_missing_questions += [
-            f"Review requested a check that was not completed: {r}" for r in review.reasons]
+        # A check that is still an open question is already listed above.
+        listed = finding.uncertainty.critical_missing_questions
+        listed += [f"Review requested a check that was not completed: {r}" for r in reasons
+                   if r not in listed]
     try:
         # The report is written from the reviewed assessment, not the one the review started from.
         report: Report = llm.report(state, decisive)
     except ProviderError as exc:
         if manifest is not None:
             manifest.errors.append(str(exc))
-        finding.uncertainty.measurement_limitations = [f"report did not run: {exc}"]
+        finding.uncertainty.measurement_limitations = [f"report did not run: {exc}"] + (
+            reasons if review.decision != "accept" else [])
         return finding
     finding.summary = checked(report.summary)
     if report.supported_rewrite and numbers_supported(report.supported_rewrite, state, spans):

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable
 
-from backend.assessment.review import finalize, run_review
+from backend.assessment.review import finalize, numbers_supported, run_review
 from backend.belief.priority import choose, critical_open
 from backend.belief import strategies
 from backend.belief.state import apply_answers
@@ -17,7 +17,7 @@ from backend.db import Store
 from backend.evidence.ledger import admissible
 from backend.evidence.provenance import lineage, reconcile
 from backend.models import (
-    Calculation, CalcInput, Claim, DocumentSnapshot, EvidenceItem, InvestigationState, Mode,
+    AnswerStatus, Calculation, CalcInput, Claim, DocumentSnapshot, EvidenceItem, InvestigationState, Mode,
     Relationship, RunManifest, ScoringTarget, SourceSpan, VerificationQuestion,
 )
 from backend.planning import checklists
@@ -135,9 +135,12 @@ def investigate(analysis_id: str, claim: Claim, deps: Deps, llm: LLM, manifest: 
 
 
 def _rounds(analysis_id: str, state: InvestigationState, seen: dict[str, SourceSpan], budget: int,
-            deps: Deps, llm: LLM, manifest: RunManifest, mode: Mode,
-            cutoff: datetime | None) -> tuple[InvestigationState, dict[str, SourceSpan]]:
-    """Run up to `budget` rounds on the state. Used for the investigation and for follow-up."""
+            deps: Deps, llm: LLM, manifest: RunManifest, mode: Mode, cutoff: datetime | None,
+            requested: list[str] | None = None) -> tuple[InvestigationState, dict[str, SourceSpan]]:
+    """Run up to `budget` rounds on the state. Used for the investigation and for follow-up.
+
+    `requested` holds ids of questions that are searched for before any other open question.
+    """
     store, settings, claim = deps.store, deps.settings, state.claim
     corpus = None
     if mode != Mode.live:
@@ -148,16 +151,18 @@ def _rounds(analysis_id: str, state: InvestigationState, seen: dict[str, SourceS
         if _cancelled(store, analysis_id):
             state.stop_reason = "cancelled"
             break
-        selected = choose(state.questions)
+        first = [q for q in state.questions if q.id in (requested or [])
+                 and q.status == AnswerStatus.open]
+        selected = (first + [q for q in choose(state.questions) if q not in first])[:max(3, len(first))]
         if not selected:
             state.stop_reason = "no_open_questions"
             break
         passages, context = retrieve(deps.index, store, claim, selected, settings.retrieval,
-                                     corpus, cutoff)
+                                     corpus, cutoff, manifest)
         if mode == Mode.live and all(p.document_id == claim.document_id for p in passages):
             if discover(llm, store, deps.index, claim.text, manifest):
                 passages, context = retrieve(deps.index, store, claim, selected,
-                                             settings.retrieval, corpus, cutoff)
+                                             settings.retrieval, corpus, cutoff, manifest)
         if not passages:
             state.stop_reason = "no_source_in_allowed_corpus"
             break
@@ -173,7 +178,7 @@ def _rounds(analysis_id: str, state: InvestigationState, seen: dict[str, SourceS
             break
         items, repeats = _items(analysis, state, shown, manifest, store)
         known = {e.id for e in state.evidence}
-        changed = reconcile(state, items, repeats)
+        reconcile(state, items, repeats)
         calculations = _calculations(analysis, state, shown, manifest)
         # Evidence, answers, and verified calculations are recorded before the updater runs, so
         # the updater decides with the current round's results in front of it. They stay
@@ -181,10 +186,6 @@ def _rounds(analysis_id: str, state: InvestigationState, seen: dict[str, SourceS
         state.calculations += calculations
         apply_answers(state, analysis.answers)
         state.round += 1
-        if not changed and not calculations:
-            # Nothing new was admitted, so the assessment is left as it was.
-            state.stop_reason = "no_new_evidence"
-            break
         new_ids = [e.id for e in state.evidence if e.id not in known]
         try:
             record = strategies.step(state, new_ids, [c.id for c in calculations], llm,
@@ -195,6 +196,7 @@ def _rounds(analysis_id: str, state: InvestigationState, seen: dict[str, SourceS
             state.stop_reason = "provider_error"
             break
         if record is None:
+            # The updater has already decided on exactly this input, so the assessment stays.
             state.stop_reason = "no_new_evidence"
             break
         store.put("updates", record.id, record, claim_id=claim.id)
@@ -206,6 +208,19 @@ def _rounds(analysis_id: str, state: InvestigationState, seen: dict[str, SourceS
     else:
         state.stop_reason = "budget_exhausted"
     return state, seen
+
+
+def _store(store: Store, analysis_id: str, state: InvestigationState) -> None:
+    """Write the state and its evidence rows. Called after each stage, so a job that stops early
+    keeps the rows its stored updates refer to."""
+    claim_id = state.claim.id
+    for item in state.evidence:
+        store.put("evidence", item.id, item, claim_id=claim_id, group_id=item.group_id,
+                  span_id=item.span_id)
+    for calculation in state.calculations:
+        store.put("calculations", calculation.id, calculation, claim_id=claim_id)
+    store.put("states", f"{analysis_id}-{claim_id}", state, analysis_id=analysis_id,
+              claim_id=claim_id)
 
 
 def run_analysis(analysis_id: str, deps: Deps) -> None:
@@ -240,34 +255,32 @@ def run_analysis(analysis_id: str, deps: Deps) -> None:
             store.put("claims", claim.id, claim, analysis_id=analysis_id,
                       document_id=claim.document_id)
             state, seen = investigate(analysis_id, claim, deps, llm, manifest, mode, cutoff)
-            store.put("states", f"{analysis_id}-{claim.id}", state, analysis_id=analysis_id,
-                      claim_id=claim.id)
+            _store(store, analysis_id, state)
             if state.stop_reason == "cancelled":
                 save("cancelled", partial=True)
                 return
             review = run_review(state, seen, llm, manifest)
-            if review and review.decision == "request_check" and settings.max_follow_up_rounds:
-                # The requested check becomes a critical question and gets its own bounded rounds.
-                state.questions += [VerificationQuestion(
+            # A reason with a number found in no source is not turned into a question.
+            checks = [r for r in review.reasons if numbers_supported(r, state, seen)] \
+                if review and review.decision == "request_check" else []
+            if checks and settings.max_follow_up_rounds:
+                # Each requested check becomes a critical question that is searched for first.
+                asked = [VerificationQuestion(
                     id=f"{claim.id}-r{i}", claim_id=claim.id, text=reason, materiality=3,
                     critical=True, why_it_matters="requested by review")
-                    for i, reason in enumerate(review.reasons)]
+                    for i, reason in enumerate(checks)]
+                state.questions += asked
                 state, seen = _rounds(analysis_id, state, seen, settings.max_follow_up_rounds,
-                                      deps, llm, manifest, mode, cutoff)
-                store.put("states", f"{analysis_id}-{claim.id}", state, analysis_id=analysis_id,
-                          claim_id=claim.id)
+                                      deps, llm, manifest, mode, cutoff, [q.id for q in asked])
+                _store(store, analysis_id, state)
+                if state.stop_reason == "cancelled":
+                    save("cancelled", partial=True)
+                    return
                 review = run_review(state, seen, llm, manifest)
             finding = finalize(state, seen, llm, review, cutoff, manifest)
-            for item in state.evidence:
-                store.put("evidence", item.id, item, claim_id=claim.id, group_id=item.group_id,
-                          span_id=item.span_id)
-            for calculation in state.calculations:
-                store.put("calculations", calculation.id, calculation, claim_id=claim.id)
-            store.put("states", f"{analysis_id}-{claim.id}", state, analysis_id=analysis_id,
-                      claim_id=claim.id)
+            _store(store, analysis_id, state)
             store.put("findings", finding.finding_id, finding, analysis_id=analysis_id,
                       claim_id=claim.id)
-            manifest.embedding_search = getattr(deps.index, "used_embeddings", None)
             save("running", claims_done=done)
         # Operational errors mean some work did not run, so the result is labelled partial.
         save("complete", partial=bool(manifest.errors))
