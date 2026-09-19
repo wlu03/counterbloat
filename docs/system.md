@@ -61,7 +61,8 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
   resume, so a server restart leaves it `running`.
 - `Claim.version` is always 1. A newly found qualification does not create a new claim version.
 - The interactive API pages at `/docs` and `/openapi.json` do not require the API key.
-- sec.gov and bp.com refuse the fetcher's User-Agent with 403. Such documents must be uploaded.
+- sec.gov answers 403 unless `FETCH_USER_AGENT` names a contact in the form SEC asks for. bp.com
+  refuses automated requests. Documents from a site that refuses the fetcher must be uploaded.
 - Text made block-level only by CSS is joined without a space. A claim that appears only in a
   table cell is not extracted, because table rows are evidence passages, not claim candidates.
 - No result has been measured on any dataset.

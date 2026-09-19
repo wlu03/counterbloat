@@ -55,3 +55,23 @@ def test_transport_and_parse_failures_are_fetch_errors(monkeypatch, store):
         module.fetch("http://example.com/")
     with pytest.raises(module.FetchError):
         admit(store, b"<!-- app shell -->", "text/html")
+
+
+def test_user_agent_comes_from_the_environment(monkeypatch):
+    import httpx
+
+    from backend.ingestion import fetch as module
+
+    seen = {}
+
+    def handler(request):
+        seen["agent"] = request.headers["user-agent"]
+        return httpx.Response(200, headers={"content-type": "text/plain"}, content=b"ok")
+
+    real = httpx.Client
+    monkeypatch.setenv("FETCH_USER_AGENT", "Example Org contact@example.org")
+    monkeypatch.setattr(module, "validate_url", lambda url: "93.184.216.34")
+    monkeypatch.setattr(module.httpx, "Client",
+                        lambda **kwargs: real(transport=httpx.MockTransport(handler)))
+    module.fetch("http://example.com/")
+    assert seen["agent"] == "Example Org contact@example.org"

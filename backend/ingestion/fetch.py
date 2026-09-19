@@ -7,6 +7,8 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
+from backend.config import env
+
 MAX_BYTES = 20_000_000
 MAX_REDIRECTS = 5
 ALLOWED_TYPES = ("text/html", "application/xhtml+xml", "text/plain", "application/pdf")
@@ -52,7 +54,9 @@ def _fetch(url: str) -> tuple[bytes, str, str]:
             # redirect it. The Host header and TLS server name still carry the hostname.
             target = httpx.URL(url)
             pinned = target.copy_with(host=validate_url(url))
-            headers = {"Host": target.netloc.decode(), "User-Agent": "Countercheck/0.1"}
+            # Some sites, such as sec.gov, answer 403 unless the User-Agent names a contact.
+            headers = {"Host": target.netloc.decode(),
+                       "User-Agent": env("FETCH_USER_AGENT", "Countercheck/0.1")}
             with client.stream("GET", pinned, headers=headers,
                                extensions={"sni_hostname": target.host}) as response:
                 if response.is_redirect:
