@@ -28,7 +28,8 @@ def reconcile(state: InvestigationState, items: list[EvidenceItem],
     groups = {g.id: g for g in state.groups}
     by_span = {e.span_id: e for e in state.evidence}
     known = {(e.span_id, e.target) for e in state.evidence}
-    for item in items:
+    # Originals are processed before the passages that repeat them, whatever order they arrive in.
+    for item in sorted(items, key=lambda i: i.span_id in repeats):
         if (item.span_id, item.target) in known:
             continue
         original = by_span.get(repeats.get(item.span_id, ""))
