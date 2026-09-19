@@ -28,12 +28,14 @@ def value_in_source(value: Decimal, span: SourceSpan) -> bool:
 
 
 def _unit_product(a: str, b: str) -> str:
-    # "kg CO2e/unit" times "unit" is "kg CO2e". Other products keep both unit names.
+    # "kg CO2e/unit" times "unit" is "kg CO2e". A rate times any other unit is rejected.
     for rate, other in ((a, b), (b, a)):
         if "/" in rate:
             numerator, denominator = rate.rsplit("/", 1)
-            if denominator.strip().rstrip("s") == other.strip().rstrip("s"):
+            if denominator.strip().lower().rstrip("s") == other.strip().lower().rstrip("s"):
                 return numerator.strip()
+    if "/" in a or "/" in b:
+        raise CalculationError(f"incompatible units in multiply: {a}, {b}")
     return f"{a}*{b}"
 
 
@@ -42,6 +44,7 @@ def execute(calc_id: str, claim_id: str, inputs: list[CalcInput], steps: list[Ca
     values = {i.name: i.value for i in inputs}
     units = {i.name: i.unit for i in inputs}
     scope = {i.name: (i.population, i.boundary) for i in inputs}
+    periods = {i.name: i.period for i in inputs}
     for step in steps:
         if step.op not in OPS:
             raise CalculationError(f"operation not allowed: {step.op}")
@@ -62,6 +65,9 @@ def execute(calc_id: str, claim_id: str, inputs: list[CalcInput], steps: list[Ca
         elif step.op == "subtract":
             result, unit = x0 - x1, units[step.args[0]]
         elif step.op == "multiply":
+            first, second = periods.get(step.args[0]), periods.get(step.args[1])
+            if first and second and first != second:
+                raise CalculationError(f"different periods in multiply: {first}, {second}")
             result, unit = x0 * x1, _unit_product(units[step.args[0]], units[step.args[1]])
         elif step.op == "divide":
             if x1 == 0:
