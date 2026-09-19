@@ -20,6 +20,14 @@ class Example(BaseModel):
     evaluation_only: dict
 
 
+def gold(dataset: str, index: int, fields: dict, required: tuple[str, ...]) -> dict:
+    """An example with no gold label cannot be verified against, so refuse it here."""
+    missing = [k for k in required if fields.get(k) in (None, "", [], {})]
+    if missing:
+        raise ValueError(f"{dataset} row {index} is missing gold {', '.join(missing)}")
+    return fields
+
+
 def read_rows(path: str | Path) -> Iterator[dict]:
     path = Path(path)
     if path.suffix == ".csv":

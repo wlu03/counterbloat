@@ -95,3 +95,21 @@ def test_a_verdict_without_evidence_becomes_insufficient():
     record = apply_update(state, update, [], [], "v")
     assert state.assessment.status == EvidenceStatus.insufficient
     assert record.new_status == EvidenceStatus.insufficient and state.assessment.mechanisms == []
+
+
+def test_an_example_without_a_gold_label_is_refused(tmp_path):
+    source = tmp_path / "finqa.json"
+    source.write_text(json.dumps([{"id": "f1", "pre_text": ["a"], "post_text": ["b"],
+                                   "table": [["x", "1"]],
+                                   "qa": {"question": "q?", "program": "add(1,2)"}}]))
+    with pytest.raises(ValueError, match="missing gold exe_ans"):
+        list(finqa.load(source))
+
+
+def test_a_zero_answer_still_counts_as_a_gold_label(tmp_path):
+    source = tmp_path / "finqa.json"
+    source.write_text(json.dumps([{"id": "f1", "pre_text": ["a"], "post_text": ["b"],
+                                   "table": [["x", "1"]],
+                                   "qa": {"question": "q?", "program": "add(1,-1)", "exe_ans": 0}}]))
+    [example] = finqa.load(source)
+    assert example.evaluation_only["exe_ans"] == 0
