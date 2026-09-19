@@ -46,7 +46,7 @@ class ReviewRequest(BaseModel):
 def default_deps() -> Deps:
     from backend.providers.openai_client import OpenAILLM
 
-    settings = load_settings()
+    settings = load_settings(env("COUNTERCHECK_CONFIG") or "config/app.yaml")
     store = Store(env("DATABASE_URL", "sqlite:///countercheck.db"))
     if env("ELASTICSEARCH_URL"):
         from backend.retrieval.elastic import ElasticIndex
