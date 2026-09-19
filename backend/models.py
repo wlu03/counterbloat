@@ -228,8 +228,9 @@ class ScoringTarget(BaseModel):
 
 
 class EvidenceScore(BaseModel):
+    # One provenance group, or several joined by "+" when one calculation reads from all of them.
     group_id: str
-    group_version: int
+    group_version: int  # the sum of the member groups' versions
     # Positive values favour the target's positive hypothesis, negative values its alternative.
     log_evidence: float
     method: str  # llm_estimated | learned | validated_observation_model
@@ -257,7 +258,7 @@ class InvestigationState(BaseModel):
     claim: Claim
     target: ScoringTarget | None = None
     belief: NumericBelief | None = None
-    scores: list[EvidenceScore] = []  # the latest score of each provenance group
+    scores: list[EvidenceScore] = []  # the latest score of each scoring unit
     last_input_hash: str = ""  # input of the last committed update, used to skip repeats
     questions: list[VerificationQuestion] = []
     evidence: list[EvidenceItem] = []

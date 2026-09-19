@@ -50,7 +50,9 @@ def export_trace(store: Store, analysis_id: str, claim_id: str) -> Trace:
         events += [Event(kind="calculate", calculation=c)
                    for c in state.calculations if c.round == number]
     members = {g.id: g.member_ids for g in state.groups}
-    scores = {i: s.log_evidence for s in state.scores for i in members.get(s.group_id, [])}
+    # A score may cover several groups joined by "+". Every member item gets the recorded value.
+    scores = {i: s.log_evidence for s in state.scores for g in s.group_id.split("+")
+              for i in members.get(g, [])}
     return Trace(id=f"{analysis_id}-{claim_id}", claim=state.claim, questions=state.questions,
                  cutoff=state.target.cutoff if state.target else None, events=events,
                  scripted_scores=scores,

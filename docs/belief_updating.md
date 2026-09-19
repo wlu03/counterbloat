@@ -48,27 +48,32 @@ language model. It is not derived from a likelihood model.
 
 The status comes from the linguistic update. In addition, a score is computed:
 
-    z = logit(prior) + tempering * sum over active groups g of w_g * s_g
+    z = logit(prior) + tempering * sum over scoring units u of s_u
     raw_probability = sigmoid(z)
 
-- `s_g` is the log-evidence of provenance group `g`: the model's estimate of
+- A scoring unit is one active provenance group, or several groups joined because one
+  calculation reads its inputs from all of them. A calculation is derived from its input groups.
+  If each input group were scored with the result, the result would count once per group. The
+  first live run showed this: two groups that fed one calculation each received about +4.5.
+  They are now scored together and the result counts once.
+- `s_u` is the log-evidence of unit `u`: the model's estimate of
   ln( P(evidence | H = 1) / P(evidence | H = 0) ), limited to [-5, 5]. Its method is recorded as
   `llm_estimated`. The interface also names `learned` and `validated_observation_model`. No
   scorer of those kinds exists here.
-- `w_g` is 1. Each group counts once, however many passages repeat it.
+- Each unit counts once, however many passages repeat its sources.
 - `prior` defaults to 0.5 and `tempering` to 1.0. The prior is a neutral scenario value. It was
   not estimated from data.
 - The sum is recomputed from the active ledger at every update. Nothing is carried over, so the
   result does not depend on the order of arrival, a repeated passage adds nothing, a revised
   score replaces the old one, and a withdrawn group stops contributing.
 - A score is stored with the hash of its conditioning context: target, cutoff, claim text and
-  version, qualifications, the group's members, the calculations that read from the group, and
-  the scorer version. When any of these changes, the group is scored again.
-- A score that is unavailable, not finite, or outside the limit is an abstention. The group
+  version, qualifications, the unit's members, the calculations that read from the unit, and
+  the scorer version. When any of these changes, the unit is scored again.
+- A score that is unavailable, not finite, or outside the limit is an abstention. The unit
   contributes nothing. It is not counted as zero evidence observed, and missing evidence is
   never a negative contribution.
 
-This is an approximation with three known gaps. The groups are treated as conditionally
+This is an approximation with three known gaps. The units are treated as conditionally
 independent given H, which is false when two sources share an unstated origin. The per-group
 values are estimates by a language model, not measured likelihood ratios. No calibration data
 exists, so `calibrated_probability` stays null and `calibration_status` stays `uncalibrated`.

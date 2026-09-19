@@ -82,7 +82,23 @@ def test_groups_are_scored_once_per_context_and_again_when_it_changes():
     state.calculations.append(calc)                                # new context for group 0 only
     strategies.score_groups(state, llm, failures)
     assert llm.score_calls == 3
-    assert [s.log_evidence for s in state.scores] == [1.5, 0.25]
+    assert {s.group_id: s.log_evidence for s in state.scores} == {state.groups[0].id: 1.5,
+                                                                  state.groups[1].id: 0.25}
+
+
+def test_groups_that_feed_one_calculation_are_scored_together_and_count_once():
+    llm, state = FakeLLM(), _state()
+    reconcile(state, [_item(1, "A."), _item(2, "B."), _item(3, "C.")], {})
+    a, b, c = (g.id for g in state.groups)
+    state.calculations.append(Calculation(id="n", claim_id="c", inputs=[], steps=[], outputs={},
+                                          units={}, lineage=[a, b], claim_relation="disagrees"))
+    strategies.score_groups(state, llm, _manifest())
+    assert llm.score_calls == 2
+    assert {s.group_id: s.log_evidence for s in state.scores} == {"+".join(sorted([a, b])): 1.5, c: 0.25}
+    settings = AssessmentSettings(updater="evidence_accumulator", prior=0.5)
+    assert strategies.accumulate(state, settings).raw_logit == pytest.approx(1.75)
+    withdraw(state, "e2")  # the calculation loses an input group, so the joined score lapses
+    assert strategies.accumulate(state, settings).raw_logit == pytest.approx(0.25)
 
 
 def test_unavailable_and_invalid_scores_add_nothing():

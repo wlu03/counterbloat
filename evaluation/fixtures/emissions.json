@@ -302,9 +302,9 @@
     }
   ],
   "scripted_scores": {
+    "fictional-doc-cc1c21f52b9abc84-s1-c0-e1": 1.5,
     "fictional-doc-cc1c21f52b9abc84-s1-c0-e0": 1.5,
     "fictional-doc-cc1c21f52b9abc84-s1-c0-e3": 1.5,
-    "fictional-doc-cc1c21f52b9abc84-s1-c0-e1": 1.5,
     "fictional-doc-cc1c21f52b9abc84-s1-c0-e2": 0.25
   },
   "source": "Fictional emissions example run with the scripted test provider. Scores are synthetic.",

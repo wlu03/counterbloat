@@ -18,7 +18,7 @@ from backend.belief.accumulator import EvidenceAccumulator, EvidenceContribution
 from backend.belief.state import apply_update
 from backend.config import AssessmentSettings
 from backend.models import (
-    BeliefUpdate, Calculation, Claim, EvidenceItem, EvidenceScore, InvestigationState,
+    BeliefUpdate, Calculation, Claim, EvidenceGroup, EvidenceItem, EvidenceScore, InvestigationState,
     NumericBelief, RunManifest, ScoringTarget,
 )
 from backend.providers.base import LLM, ProviderError, StateUpdate
@@ -68,12 +68,41 @@ def context_hash(target: ScoringTarget, claim: Claim, members: list[EvidenceItem
                                for c in calculations)})
 
 
-def accumulate(state: InvestigationState, settings: AssessmentSettings) -> NumericBelief:
-    """Recompute the score from the scores of the active groups. Nothing is carried over."""
+def units(state: InvestigationState) -> dict[str, list[EvidenceGroup]]:
+    """Active groups, joined when one calculation reads from several of them.
+
+    A calculation is derived from its input groups. Scoring each input group with the result
+    would count the result once per group, so the groups are scored together and count once.
+    The key joins the sorted group ids.
+    """
     active = {g.id: g for g in state.groups if g.active}
+    root = {g: g for g in active}
+
+    def find(group_id: str) -> str:
+        while root[group_id] != group_id:
+            group_id = root[group_id]
+        return group_id
+
+    for calculation in state.calculations:
+        linked = [g for g in calculation.lineage if g in active]
+        for other in linked[1:]:
+            root[find(other)] = find(linked[0])
+    joined: dict[str, list[EvidenceGroup]] = {}
+    for group_id in sorted(active):
+        joined.setdefault(find(group_id), []).append(active[group_id])
+    return {"+".join(g.id for g in members): members for members in joined.values()}
+
+
+def _version(members: list[EvidenceGroup]) -> int:
+    # Group versions only rise, so the sum changes whenever any member group changes.
+    return sum(g.version for g in members)
+
+
+def accumulate(state: InvestigationState, settings: AssessmentSettings) -> NumericBelief:
+    """Recompute the score from the scores of the current units. Nothing is carried over."""
+    current = {key: _version(members) for key, members in units(state).items()}
     ledger = EvidenceAccumulator(settings.prior, settings.tempering)
-    used = [s for s in state.scores if s.group_id in active
-            and s.group_version == active[s.group_id].version]
+    used = [s for s in state.scores if current.get(s.group_id) == s.group_version]
     for score in used:
         ledger.upsert(EvidenceContribution(score.group_id, score.group_version, score.log_evidence))
     return NumericBelief(
@@ -83,14 +112,15 @@ def accumulate(state: InvestigationState, settings: AssessmentSettings) -> Numer
 
 
 def score_groups(state: InvestigationState, llm: LLM, manifest: RunManifest) -> None:
-    """Score each active group once per conditioning context. A failed score adds nothing."""
+    """Score each unit once per conditioning context. A failed score adds nothing."""
     kept: list[EvidenceScore] = []
-    for group in (g for g in state.groups if g.active):
-        members = [e for e in state.evidence if e.group_id == group.id]
-        related = [c for c in state.calculations if group.id in c.lineage]
+    for key, groups in units(state).items():
+        ids = {g.id for g in groups}
+        members = [e for e in state.evidence if e.group_id in ids]
+        related = [c for c in state.calculations if ids & set(c.lineage)]
         context = context_hash(state.target, state.claim, members, related)
-        cached = next((s for s in state.scores if s.group_id == group.id
-                       and s.group_version == group.version
+        cached = next((s for s in state.scores if s.group_id == key
+                       and s.group_version == _version(groups)
                        and s.conditioning_context_hash == context), None)
         if cached is not None:
             kept.append(cached)
@@ -98,16 +128,15 @@ def score_groups(state: InvestigationState, llm: LLM, manifest: RunManifest) -> 
         try:
             draft = llm.score_evidence(state.target, state.claim, members, related)
         except ProviderError as exc:
-            manifest.errors.append(f"evidence score unavailable for {group.id}: {exc}")
+            manifest.errors.append(f"evidence score unavailable for {key}: {exc}")
             continue
         if not isfinite(draft.log_evidence) or abs(draft.log_evidence) > MAX_LOG_EVIDENCE:
             # An unusable score is an abstention. It is not treated as zero or as evidence.
-            manifest.rejections.append(
-                f"evidence score rejected for {group.id}: {draft.log_evidence}")
+            manifest.rejections.append(f"evidence score rejected for {key}: {draft.log_evidence}")
             continue
         member_ids = {e.id for e in members}
         kept.append(EvidenceScore(
-            group_id=group.id, group_version=group.version, log_evidence=draft.log_evidence,
+            group_id=key, group_version=_version(groups), log_evidence=draft.log_evidence,
             method="llm_estimated", short_basis=draft.short_basis,
             supporting_evidence_ids=[i for i in draft.supporting_evidence_ids if i in member_ids],
             conditioning_context_hash=context, scorer_version=SCORER_VERSION))

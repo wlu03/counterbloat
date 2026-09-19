@@ -35,7 +35,11 @@ def test_accumulator_mode_stores_an_internal_score_and_no_public_probability(sto
     assert belief.method == "evidence_accumulator" and belief.calibration_status == "uncalibrated"
     assert belief.target_id == state.target.id == "material-overstatement-v1"
     assert 0.5 < belief.raw_probability < 1 and belief.calibrated_probability is None
-    assert {c.group_id for c in belief.contributions} == {g.id for g in state.groups if g.active}
+    # The two groups that feed the calculation are scored as one unit, so its result counts once.
+    scored = [set(c.group_id.split("+")) for c in belief.contributions]
+    assert sorted(map(len, scored)) == [1, 2]
+    assert set().union(*scored) == {g.id for g in state.groups if g.active}
+    assert belief.raw_logit == pytest.approx(1.5 + 0.25)
     assert all(c.method == "llm_estimated" for c in belief.contributions)
     [update] = updates
     assert update.strategy == "evidence_accumulator" and update.input_state_hash
