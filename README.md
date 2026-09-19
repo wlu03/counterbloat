@@ -26,8 +26,8 @@ Tests use fake providers and need no keys or services.
 
 ## Benchmark datasets
 
-The benchmark kit is in `datasets/Counterbloat_Public_Benchmark_Kits_v1_1/`. Start with its
-`START_HERE.md`.
+The benchmark kit is in `datasets/`, one directory per dataset. Start with
+`datasets/benchkit/README.md`.
 
 | Dataset          | Main question it answers                                                                                                                                    |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -40,12 +40,11 @@ The ASA data is included: 30 assertions from 24 rulings, with draft references t
 been reviewed. FinQA, FinanceBench, and AVeriTeC are not included. The kit downloads each of
 them to your machine:
 
-    cd datasets/Counterbloat_Public_Benchmark_Kits_v1_1
-    python benchmark.py validate --dataset asa --mode retrospective
-    python benchmark.py prepare --dataset finqa --accept-license
+    uv run python -m datasets.benchmark validate --dataset asa --mode retrospective
+    uv run python -m datasets.benchmark prepare --dataset finqa --accept-license
 
-Give a system under test only the selected mode's `runtime/` folder. The `evaluator_only/` and
-`bundled/` folders and the guides contain answers.
+Give a system under test only the selected mode's `runtime/` folder. The `evaluator_only/`
+folders and the guides contain answers.
 
 ## Updating strategies and experiments
 
