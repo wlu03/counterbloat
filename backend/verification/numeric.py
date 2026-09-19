@@ -45,6 +45,11 @@ def _unit_product(a: str, b: str) -> str:
     return f"{a}*{b}"
 
 
+def _year(period: str | None) -> int | None:
+    found = re.fullmatch(r"\D*((?:19|20)\d{2})\D*", period or "")
+    return int(found.group(1)) if found else None
+
+
 def claim_relation(outputs: dict[str, Decimal], claim_output: str | None,
                    claim_expected: str | None, claim_text: str) -> tuple[Decimal | None, str]:
     """Compare the named output with the value the claim states.
@@ -87,6 +92,14 @@ def execute(calc_id: str, claim_id: str, inputs: list[CalcInput], steps: list[Ca
             if len(scopes) > 1:
                 raise CalculationError(f"different population or boundary in {step.op}")
         x0, x1 = args[0], args[1]
+        shared = {periods.get(a) for a in step.args}
+        # A result of values from one period belongs to that period.
+        periods[step.out] = shared.pop() if len(shared) == 1 else None
+        if step.op in ("pct_change", "reduction"):
+            base, later = (_year(periods.get(a)) for a in step.args[:2])
+            if base and later and base > later:
+                # The first argument is the base. A later base reverses the sign and the ratio.
+                raise CalculationError(f"{step.op} has the later period first: {base}, {later}")
         if step.op in ("add", "sum"):
             result, unit = sum(args, Decimal(0)), units[step.args[0]]
         elif step.op == "subtract":

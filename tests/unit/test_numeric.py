@@ -43,3 +43,19 @@ def test_input_must_appear_in_its_source():
                       text="Units produced | 2024: 1,000 | 2025: 2,000")
     assert value_in_source(Decimal(1000), span)
     assert not value_in_source(Decimal(1500), span)
+
+
+def test_a_change_computed_from_the_later_period_to_the_earlier_one_is_rejected():
+    def value(name, number, period):
+        return CalcInput(name=name, value=Decimal(number), unit="t", period=period, source_span_id="s")
+
+    inputs = [value("a24", "10", "2024"), value("b24", "1000", "FY2024"),
+              value("a25", "6", "2025"), value("b25", "2000", "2025")]
+    totals = [CalcStep(op="add", args=["a24", "a24"], out="e24"),
+              CalcStep(op="add", args=["a25", "a25"], out="e25")]
+    forward = execute("n", "c", inputs, totals + [CalcStep(op="pct_change", args=["e24", "e25"], out="d")])
+    assert forward.outputs["d"] == Decimal("-40")
+    with pytest.raises(CalculationError, match="later period first"):
+        execute("n", "c", inputs, totals + [CalcStep(op="pct_change", args=["e25", "e24"], out="d")])
+    with pytest.raises(CalculationError, match="later period first"):
+        execute("n", "c", inputs, [CalcStep(op="reduction", args=["a25", "b24"], out="d")])
