@@ -11,7 +11,7 @@ from backend.models import (
     Relationship, RunManifest,
 )
 from backend.providers.base import StateUpdate
-from datasets.adapters import finqa, greenclaims
+from datasets.adapters import climate_fever, finqa, greenclaims, quantemp
 from datasets.adapters.base import export
 from datasets.manifests.manifest import write_manifest
 from evaluation.ablations.configs import settings_for
@@ -113,3 +113,47 @@ def test_a_zero_answer_still_counts_as_a_gold_label(tmp_path):
                                    "qa": {"question": "q?", "program": "add(1,-1)", "exe_ans": 0}}]))
     [example] = finqa.load(source)
     assert example.evaluation_only["exe_ans"] == 0
+
+
+def test_quantemp_keeps_the_fact_check_out_of_the_model_input(tmp_path):
+    source = tmp_path / "q.json"
+    source.write_text(json.dumps([{"claim": "Costs rose 40% in a year.", "label": "False",
+                                   "label_original": "pants-fire", "taxonomy_label": "statistical  ",
+                                   "doc": "The fact-checker rated this false.",
+                                   "url": "https://www.politifact.com/factchecks/x/",
+                                   "country_of_origin": "usa", "lang": "en"}]))
+    [example] = quantemp.load(source)
+    assert example.model_visible == {"claim": "Costs rose 40% in a year.",
+                                     "country_of_origin": "usa", "lang": "en"}
+    assert example.evaluation_only["label"] == "False"
+    assert example.evaluation_only["taxonomy_label"] == "statistical"
+
+
+def test_quantemp_without_a_verdict_is_refused(tmp_path):
+    source = tmp_path / "q.json"
+    source.write_text(json.dumps([{"claim": "Costs rose.", "taxonomy_label": "statistical"}]))
+    with pytest.raises(ValueError, match="missing gold label"):
+        list(quantemp.load(source))
+
+
+def test_climate_fever_shows_evidence_sentences_but_not_their_labels(tmp_path):
+    source = tmp_path / "c.jsonl"
+    source.write_text(json.dumps(
+        {"claim_id": 7, "claim": "Sea level is rising.", "claim_label": "SUPPORTS",
+         "evidences": [{"evidence_id": "Sea level:1", "article": "Sea level",
+                        "evidence": "Tide gauges show a rise.", "evidence_label": "SUPPORTS",
+                        "votes": ["SUPPORTS"], "entropy": 0.0}]}) + "\n")
+    [example] = climate_fever.load(source)
+    assert example.id == "climate_fever-7"
+    assert example.model_visible["evidence"] == [
+        {"evidence_id": "Sea level:1", "article": "Sea level", "evidence": "Tide gauges show a rise."}]
+    assert example.evaluation_only["claim_label"] == "SUPPORTS"
+    assert example.evaluation_only["evidence_labels"][0]["evidence_label"] == "SUPPORTS"
+
+
+def test_climate_fever_maps_a_parquet_style_integer_label(tmp_path):
+    source = tmp_path / "c.jsonl"
+    source.write_text(json.dumps({"claim_id": 0, "claim": "x", "claim_label": 3,
+                                  "evidences": []}) + "\n")
+    [example] = climate_fever.load(source)
+    assert example.evaluation_only["claim_label"] == "DISPUTED"

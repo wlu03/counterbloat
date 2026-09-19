@@ -14,7 +14,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from datasets.adapters import averitec, environmental_claims, financebench, finqa, greenclaims
+from datasets.adapters import (
+    averitec, climate_fever, environmental_claims, financebench, finqa, greenclaims, quantemp,
+)
 from datasets.adapters.base import export
 from datasets.manifests.manifest import write_manifest
 
@@ -25,6 +27,8 @@ ADAPTERS = {
     "finqa": (finqa.load, "MIT"),
     "financebench": (financebench.load, "CC BY-NC 4.0"),
     "greenclaims": (greenclaims.load, "unverified"),
+    "climate_fever": (climate_fever.load, "unverified"),
+    "quantemp": (quantemp.load, "unverified"),
 }
 
 
