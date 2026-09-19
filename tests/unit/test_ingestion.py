@@ -41,3 +41,25 @@ def test_snapshot_is_content_addressed(store):
     assert first.id == second.id and len(first.sha256) == 64
     assert normalized_text(first).startswith("Report")
     assert store.find("spans", document_id=first.id)[0]["id"] == spans[0].id
+
+
+def _texts(html):
+    return [s.text for s in parse("d", html, "text/html")[1]]
+
+
+def test_text_after_a_comment_is_kept():
+    html = b"<p>Total emissions fell <!-- -->40<!-- -->% per unit, <?x y?>excluding acquired sites.</p>"
+    assert _texts(html) == ["Total emissions fell 40% per unit, excluding acquired sites."]
+
+
+def test_nested_blocks_and_tables_are_emitted_once():
+    assert _texts(b"<ul><li><p>We cut emissions by 40%.</p></li></ul>") == ["We cut emissions by 40%."]
+    nested = (b"<table><tr><th>Site</th><th>2024</th></tr><tr><td>Leeds</td><td>"
+              b"<table><tr><th>k</th><th>t</th></tr><tr><td>inner</td><td>5</td></tr></table>"
+              b"</td></tr></table>")
+    assert sum("inner | t: 5" in text for text in _texts(nested)) == 1
+
+
+def test_small_fonts_are_visible_and_zero_size_is_hidden():
+    assert _texts(b'<p style="font-size:0.9em">Scope 1 rose 12%.</p>') == ["Scope 1 rose 12%."]
+    assert _texts(b'<p>Shown.</p><p style="font-size:0">Hidden.</p>') == ["Shown."]

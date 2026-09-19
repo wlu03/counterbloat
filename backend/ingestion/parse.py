@@ -4,21 +4,26 @@ from __future__ import annotations
 import io
 import re
 import unicodedata
+import zlib
+from types import SimpleNamespace
 
 from lxml import html
 
 from backend.models import SourceSpan, TableCell, TableRow
 
 PARSER_VERSION = "parse-v1"
+MAX_INFLATED = 200_000_000
 _DROP = ("script", "style", "noscript", "template", "iframe")
-_HIDDEN = re.compile(r"display\s*:\s*none|visibility\s*:\s*hidden|font-size\s*:\s*0", re.I)
+# The font-size pattern matches 0, 0px, and 0.0em, and does not match 0.9em.
+_HIDDEN = re.compile(r"display\s*:\s*none|visibility\s*:\s*hidden|font-size\s*:\s*0(?![\d.]*[1-9])",
+                     re.I)
 _BLOCKS = {"p": "paragraph", "li": "paragraph", "blockquote": "paragraph",
            "figcaption": "caption", "h1": "heading", "h2": "heading", "h3": "heading",
            "h4": "heading", "h5": "heading", "h6": "heading"}
 
 
 def normalize(text: str) -> str:
-    text = unicodedata.normalize("NFKC", text).replace(" ", " ")
+    text = unicodedata.normalize("NFKC", text)
     # Unicode tag characters and zero-width characters can carry text a reader never sees.
     text = re.sub(r"[\U000E0000-\U000E007F​-‏⁠﻿]", "", text)
     return re.sub(r"\s+", " ", text).strip()
@@ -31,7 +36,8 @@ def _visible_text(element) -> str:
 def _strip_hidden(root) -> None:
     for element in list(root.iter()):
         if not isinstance(element.tag, str):  # comments and processing instructions
-            element.getparent().remove(element) if element.getparent() is not None else None
+            if element.getparent() is not None:
+                element.drop_tree()  # drop_tree keeps the visible text that follows the node
             continue
         hidden = (element.tag in _DROP or element.get("hidden") is not None
                   or element.get("aria-hidden") == "true"
@@ -41,9 +47,10 @@ def _strip_hidden(root) -> None:
 
 
 def _table_rows(table) -> list[tuple[str, TableRow]]:
-    caption = table.find(".//caption")
+    caption = table.find("./caption")
     caption_text = _visible_text(caption) if caption is not None else None
-    rows = table.findall(".//tr")
+    # Rows of a nested table belong to that table, which is visited on its own.
+    rows = [r for r in table.iter("tr") if next(r.iterancestors("table")) is table]
     if not rows:
         return []
     headers = [_visible_text(cell) for cell in rows[0].findall("./*")]
@@ -69,7 +76,8 @@ def _html_blocks(content: bytes) -> list[tuple[str, str, TableRow | None, int | 
     for element in root.iter():
         if element.tag == "table":
             blocks += [("table_row", text, record, None) for text, record in _table_rows(element)]
-        elif element.tag in _BLOCKS and element.xpath("ancestor::table") == []:
+        elif element.tag in _BLOCKS and not any(
+                a.tag == "table" or a.tag in _BLOCKS for a in element.iterancestors()):
             text = _visible_text(element)
             if not text:
                 continue
@@ -79,9 +87,31 @@ def _html_blocks(content: bytes) -> list[tuple[str, str, TableRow | None, int | 
     return blocks
 
 
+class _CappedZlib:
+    """Replaces zlib inside pdfminer, which inflates every stream in memory with no limit."""
+    error = zlib.error
+
+    def __init__(self) -> None:
+        self.left = MAX_INFLATED
+
+    def decompress(self, data: bytes, inflater=None) -> bytes:
+        out = (inflater or zlib.decompressobj()).decompress(data, self.left + 1)
+        self.left -= len(out)
+        if self.left < 0:
+            raise ValueError("PDF inflates past the size limit")
+        return out
+
+    def decompressobj(self) -> SimpleNamespace:
+        # pdfminer retries a corrupt stream through this call, so the retry uses the same limit.
+        inflater = zlib.decompressobj()
+        return SimpleNamespace(decompress=lambda data: self.decompress(data, inflater))
+
+
 def _pdf_blocks(content: bytes) -> list[tuple[str, str, TableRow | None, int | None]]:
     import pdfplumber
+    from pdfminer import pdftypes
 
+    pdftypes.zlib = _CappedZlib()
     blocks = []
     with pdfplumber.open(io.BytesIO(content)) as pdf:
         for number, page in enumerate(pdf.pages, start=1):
