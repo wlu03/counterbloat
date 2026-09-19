@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from backend.assessment.review import finalize, rewrite_is_supported
+from backend.assessment.review import finalize, numbers_supported
 from backend.belief.state import apply_update
 from backend.claims.extract import valid
 from backend.config import Settings
@@ -91,11 +91,26 @@ def test_rewrite_may_round_a_calculated_result():
     inputs = [CalcInput(name="a", value=Decimal(120), unit="t", source_span_id="s"),
               CalcInput(name="b", value=Decimal(70), unit="t", source_span_id="s")]
     state.calculations = [execute("n", "c", inputs, [CalcStep(op="reduction", args=["a", "b"], out="r")])]
-    assert rewrite_is_supported("Emissions fell 41.7%.", state, {})
-    assert rewrite_is_supported("Emissions fell about 42%.", state, {})
-    assert not rewrite_is_supported("Emissions fell 45%.", state, {})
+    assert numbers_supported("Emissions fell 41.7%.", state, {})
+    assert numbers_supported("Emissions fell about 42%.", state, {})
+    assert not numbers_supported("Emissions fell 45%.", state, {})
 
 
 def test_bad_settings_fail_when_loaded():
     with pytest.raises(ValueError):
         Settings.model_validate({"assessment": {"updater": "tempered"}})
+
+
+class _Inventing(_Narrowing):
+    def review(self, state, decisive):
+        return ReviewResult(decision="accept", narrowed_status=None, reasons=[])
+
+    def report(self, state, decisive):
+        return Report(summary="Totals rose from 10,000 to 12,000 kg.", supported_rewrite=None,
+                      source_independence="", measurement_limitations=[],
+                      interpretation_ambiguity="")
+
+
+def test_summary_with_numbers_no_calculation_produced_is_replaced():
+    finding = finalize(InvestigationState(claim=_claim()), {}, _Inventing())
+    assert "10,000" not in finding.summary and finding.summary.startswith("Assessment:")

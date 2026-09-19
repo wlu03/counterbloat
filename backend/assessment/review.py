@@ -37,25 +37,30 @@ def _numbers(text: str) -> set[Decimal]:
     return {Decimal(n.replace(",", "")) for n in re.findall(r"\d[\d,]*\.?\d*", text)}
 
 
-def rewrite_is_supported(rewrite: str, state: InvestigationState,
-                         spans: dict[str, SourceSpan]) -> bool:
-    """A rewrite may use only numbers found in the claim, the evidence, or the calculations."""
+def numbers_supported(text: str, state: InvestigationState, spans: dict[str, SourceSpan]) -> bool:
+    """Model-written text may use only numbers found in the claim, the evidence, or the calculations."""
     allowed = _numbers(state.claim.text)
     for item in state.evidence:
         allowed |= _numbers(spans[item.span_id].text) if item.span_id in spans else set()
     outputs = [abs(v) for c in state.calculations for v in c.outputs.values()]
     # A rewrite may state a calculated result rounded to the precision it is written with.
     return all(n in allowed or any(abs(v - n) * 2 <= Decimal(1).scaleb(n.as_tuple().exponent)
-                                   for v in outputs) for n in _numbers(rewrite))
+                                   for v in outputs) for n in _numbers(text))
 
 
 def finalize(state: InvestigationState, spans: dict[str, SourceSpan], llm: LLM,
              cutoff: datetime | None = None) -> Finding:
     claim = state.claim
+    fallback = f"Assessment: {state.assessment.status}. See the evidence and calculations."
+
+    def checked(text: str) -> str:
+        return text if text and numbers_supported(text, state, spans) else fallback
+
     finding = Finding(finding_id=f"{claim.id}-f{state.version}", claim_id=claim.id,
                       claim_version=claim.version, target_rubric=claim.rubric,
                       evidence_status=state.assessment.status,
-                      mechanisms=state.assessment.mechanisms, summary=state.assessment.summary,
+                      mechanisms=state.assessment.mechanisms,
+                      summary=checked(state.assessment.summary),
                       evidence_ids=[e.id for e in state.evidence],
                       calculation_ids=[c.id for c in state.calculations],
                       evidence_cutoff=cutoff, stop_reason=state.stop_reason)
@@ -80,8 +85,8 @@ def finalize(state: InvestigationState, spans: dict[str, SourceSpan], llm: LLM,
     if review.decision == "narrow" and review.narrowed_status in weaker:
         # A review can weaken a verdict. It cannot introduce supported or contradicted.
         finding.evidence_status = review.narrowed_status
-    finding.summary = report.summary
-    if report.supported_rewrite and rewrite_is_supported(report.supported_rewrite, state, spans):
+    finding.summary = checked(report.summary)
+    if report.supported_rewrite and numbers_supported(report.supported_rewrite, state, spans):
         finding.supported_rewrite = report.supported_rewrite
     finding.uncertainty.source_independence = report.source_independence
     finding.uncertainty.measurement_limitations = report.measurement_limitations + (
