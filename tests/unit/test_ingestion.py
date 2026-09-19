@@ -54,3 +54,32 @@ def test_nested_blocks_and_tables_are_emitted_once():
 def test_small_fonts_are_visible_and_zero_size_is_hidden():
     assert _texts(b'<p style="font-size:0.9em">Scope 1 rose 12%.</p>') == ["Scope 1 rose 12%."]
     assert _texts(b'<p>Shown.</p><p style="font-size:0">Hidden.</p>') == ["Shown."]
+
+
+def test_colspan_headers_label_the_right_columns():
+    html = (b"<table><tr><th>Location</th><th>Share</th><th colspan='2'>Emissions</th><th>Change</th></tr>"
+            b"<tr><td>China</td><td>34.0%</td><td>13,259.64</td><td>3,666.95</td><td>+262%</td></tr></table>")
+    assert _texts(html) == ["China | Share: 34.0% | Emissions: 13,259.64 | Emissions: 3,666.95 | Change: +262%"]
+
+
+def test_text_outside_block_tags_is_kept():
+    assert _texts(b"<div><h2>Issue</h2>The claim was challenged.<h2>Response</h2></div>") == [
+        "Issue", "The claim was challenged.", "Response"]
+    assert _texts(b'<div class="hero">We reduced emissions by 40%.</div>') == ["We reduced emissions by 40%."]
+    assert _texts(b"<section><span>Output rose 5%.</span></section>") == ["Output rose 5%."]
+
+
+def test_line_breaks_and_superscripts_do_not_join_numbers():
+    assert _texts(b"<p>Revenue for fiscal 2023<br>56,189 million</p>") == ["Revenue for fiscal 2023 56,189 million"]
+    assert _texts("<p>Output was 3 x 10<sup>6</sup> g, or 3 × 10⁶ g.</p>".encode()) == [
+        "Output was 3 x 10^6 g, or 3 × 10^6 g."]
+
+
+def test_utf8_without_a_declared_charset_is_read_as_utf8():
+    assert _texts("<p>CO₂ fell 40% – saving €5m at our café.</p>".encode()) == [
+        "CO2 fell 40% – saving €5m at our café."]
+
+
+def test_only_footnote_markers_make_a_footnote():
+    spans = parse("d", b'<p id="cite_note-3">A cited note.</p><p class="footnote">A footnote.</p>', "text/html")[1]
+    assert [s.kind for s in spans] == ["paragraph", "footnote"]

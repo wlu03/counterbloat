@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import re
+from itertools import accumulate
 import unicodedata
 import zlib
 from types import SimpleNamespace
@@ -23,6 +24,8 @@ _BLOCKS = {"p": "paragraph", "li": "paragraph", "blockquote": "paragraph",
 
 
 def normalize(text: str) -> str:
+    # NFKC turns a superscript digit into a plain digit, which would make 10⁶ read as 106.
+    text = re.sub(r"([⁰¹²³⁴-⁹]+)", r"^\1", text)
     text = unicodedata.normalize("NFKC", text)
     # Unicode tag characters and zero-width characters can carry text a reader never sees.
     text = re.sub(r"[\U000E0000-\U000E007F​-‏⁠﻿]", "", text)
@@ -46,6 +49,11 @@ def _strip_hidden(root) -> None:
             element.drop_tree()
 
 
+def _span(cell) -> int:
+    value = (cell.get("colspan") or "").strip()
+    return int(value) if re.fullmatch(r"[1-9]\d?", value) else 1  # 1 to 99; anything else is 1
+
+
 def _table_rows(table) -> list[tuple[str, TableRow]]:
     caption = table.find("./caption")
     caption_text = _visible_text(caption) if caption is not None else None
@@ -53,14 +61,18 @@ def _table_rows(table) -> list[tuple[str, TableRow]]:
     rows = [r for r in table.iter("tr") if next(r.iterancestors("table")) is table]
     if not rows:
         return []
-    headers = [_visible_text(cell) for cell in rows[0].findall("./*")]
+    # A header cell that spans several columns labels each of them.
+    headers = [text for cell in rows[0].findall("./*")
+               for text in [_visible_text(cell)] * _span(cell)]
     result = []
     for row in rows[1:]:
-        cells = [_visible_text(cell) for cell in row.findall("./*")]
+        found = row.findall("./*")
+        cells = [_visible_text(cell) for cell in found]
         if not cells or not any(cells):
             continue
+        columns = accumulate(_span(cell) for cell in found)  # the column where the next cell starts
         pairs = [TableCell(header=headers[i] if i < len(headers) else "", text=cell)
-                 for i, cell in enumerate(cells[1:], start=1)]
+                 for i, cell in zip(columns, cells[1:])]
         record = TableRow(caption=caption_text, row_label=cells[0], cells=pairs)
         # The row text keeps the label, headers, and units together so they are retrieved as one.
         text = " | ".join(filter(None, [caption_text, cells[0]]
@@ -69,21 +81,46 @@ def _table_rows(table) -> list[tuple[str, TableRow]]:
     return result
 
 
+def _leaf_div(element) -> bool:
+    # A <div> that holds no block, table, or other <div> is a paragraph.
+    return element.tag == "div" and not any(
+        d.tag in _BLOCKS or d.tag in ("div", "table") for d in element.iterdescendants())
+
+
 def _html_blocks(content: bytes) -> list[tuple[str, str, TableRow | None, int | None]]:
-    root = html.fromstring(content)
+    try:
+        # Without this, bytes that declare no charset are read as Latin-1.
+        root = html.document_fromstring(content.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        root = html.document_fromstring(content)
     _strip_hidden(root)
+    for sup in root.iter("sup"):
+        sup.text = "^" + (sup.text or "")  # keeps 10<sup>6</sup> from reading as 106
+    for element in list(root.iter("div", "table", *_BLOCKS)):
+        # Text that follows a block inside a container becomes its own paragraph.
+        if (element.tail or "").strip() and not any(
+                a.tag == "table" or a.tag in _BLOCKS for a in element.iterancestors()):
+            wrapper = html.Element("p")
+            wrapper.text, element.tail = element.tail, None
+            element.addnext(wrapper)
+    for element in root.iter("br", "p", "div", "li", "tr", "td", "th", *_BLOCKS):
+        element.tail = " " + (element.tail or "")  # a line break or block end separates words
     blocks = []
     for element in root.iter():
         if element.tag == "table":
             blocks += [("table_row", text, record, None) for text, record in _table_rows(element)]
-        elif element.tag in _BLOCKS and not any(
+        elif (element.tag in _BLOCKS or _leaf_div(element)) and not any(
                 a.tag == "table" or a.tag in _BLOCKS for a in element.iterancestors()):
             text = _visible_text(element)
             if not text:
                 continue
             marker = " ".join([element.get("class") or "", element.get("id") or ""]).lower()
-            kind = "footnote" if "footnote" in marker or "note" in marker else _BLOCKS[element.tag]
+            kind = "footnote" if "footnote" in marker else _BLOCKS.get(element.tag, "paragraph")
             blocks.append((kind, text, None, None))
+    body = root.find("body")
+    if not blocks and body is not None:  # text held in tags that are not listed above
+        blocks = [("paragraph", normalize(p), None, None)
+                  for p in re.split(r"\n\s*\n", body.text_content()) if normalize(p)]
     return blocks
 
 

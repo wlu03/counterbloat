@@ -23,7 +23,8 @@ def parse_number(text: str) -> Decimal:
 
 def value_in_source(value: Decimal, span: SourceSpan) -> bool:
     """True when the input's number appears in the span it cites."""
-    numbers = re.findall(r"-?\d[\d,]*\.?\d*", span.text)
+    # A hyphen after a word character is a range dash, so "5-10" holds 5 and 10, not -10.
+    numbers = re.findall(r"(?<!\w)-?\d[\d,]*\.?\d*|\d[\d,]*\.?\d*", span.text)
     return any(parse_number(n) == value for n in numbers)
 
 
