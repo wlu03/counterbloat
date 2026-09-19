@@ -28,6 +28,7 @@ def admit(store: Store, content: bytes, media_type: str, url: str | None = None,
     document_id = f"doc-{digest[:16]}"
     existing = store.get("documents", document_id, DocumentSnapshot)
     if existing is not None:
+        media_type = existing.media_type  # a second upload must not re-parse stored passages
         url = existing.url or url
         published_at = existing.published_at or published_at
         admissible_from = existing.admissible_from or admissible_from
