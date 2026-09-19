@@ -22,9 +22,9 @@ class ElasticIndex:
             "document_id": {"type": "keyword"}, "kind": {"type": "keyword"},
             "text": {"type": "text"}, "admissible_from": {"type": "date"},
         }
-        if llm is not None:
-            properties["embedding"] = {"type": "dense_vector", "index": True, "similarity": "cosine",
-                                       "dims": int(env("OPENAI_EMBED_DIMS", "1536"))}
+        # The field is always mapped, so an index made without a model accepts vectors later.
+        properties["embedding"] = {"type": "dense_vector", "index": True, "similarity": "cosine",
+                                   "dims": int(env("OPENAI_EMBED_DIMS", "1536"))}
         if not self.client.indices.exists(index=INDEX):
             self.client.indices.create(index=INDEX, mappings={"dynamic": "strict",
                                                               "properties": properties})

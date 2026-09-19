@@ -23,8 +23,9 @@ class OpenAILLM:
         self.reason_model = env("OPENAI_REASON_MODEL")
         self.embed_model = env("OPENAI_EMBED_MODEL")
         self.effort = env("OPENAI_REASONING_EFFORT")
-        if not (self.extract_model and self.reason_model):
-            raise ProviderError("OPENAI_EXTRACT_MODEL and OPENAI_REASON_MODEL must be set")
+        if not (env("OPENAI_API_KEY") and self.extract_model and self.reason_model):
+            raise ProviderError(
+                "OPENAI_API_KEY, OPENAI_EXTRACT_MODEL and OPENAI_REASON_MODEL must be set")
         self.client = OpenAI()
         self.manifest = manifest
         if manifest is not None:
@@ -116,6 +117,10 @@ class OpenAILLM:
             )
         except Exception as exc:
             raise ProviderError(f"openai discover failed: {exc}") from exc
+        usage = response.usage
+        self._record(ProviderCall(provider="openai", purpose="discover", model=self.reason_model,
+                                  input_tokens=usage.input_tokens if usage else 0,
+                                  output_tokens=usage.output_tokens if usage else 0))
         urls: list[str] = []
         for item in response.output:
             sources = getattr(getattr(item, "action", None), "sources", None) or []
