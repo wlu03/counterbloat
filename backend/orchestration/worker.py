@@ -35,6 +35,7 @@ class Deps:
     llm_factory: Callable[[RunManifest], LLM]
     router: Router | None = None
     compressor: Compressor | None = None
+    transcribe: Callable[[bytes], str] | None = None  # reads PDF pages that have no text layer
 
 
 def _cancelled(store: Store, analysis_id: str) -> bool:

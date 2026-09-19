@@ -1,6 +1,7 @@
 """OpenAI adapter: structured calls through the Responses API, embeddings, and web search."""
 from __future__ import annotations
 
+import base64
 import json
 
 from openai import OpenAI
@@ -105,6 +106,22 @@ class OpenAILLM:
         self._record(ProviderCall(provider="openai", purpose="embed", model=self.embed_model,
                                   input_tokens=response.usage.total_tokens))
         return [item.embedding for item in response.data]
+
+    def transcribe(self, png: bytes) -> str:
+        """Read the text of one page image. Used for PDF pages that have no text layer."""
+        picture = "data:image/png;base64," + base64.b64encode(png).decode()
+        try:
+            response = self.client.responses.create(
+                model=self.extract_model, store=False,
+                input=[{"role": "developer", "content": prompts.TRANSCRIBER},
+                       {"role": "user", "content": [{"type": "input_image", "image_url": picture}]}])
+        except Exception as exc:
+            raise ProviderError(f"openai transcribe failed: {exc}") from exc
+        usage = response.usage
+        self._record(ProviderCall(provider="openai", purpose="transcribe", model=self.extract_model,
+                                  input_tokens=usage.input_tokens if usage else 0,
+                                  output_tokens=usage.output_tokens if usage else 0))
+        return response.output_text
 
     def discover(self, query: str) -> list[str]:
         """Return candidate URLs only. The caller fetches and preserves each source."""

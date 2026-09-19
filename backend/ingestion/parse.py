@@ -7,6 +7,7 @@ from itertools import accumulate
 import unicodedata
 import zlib
 from types import SimpleNamespace
+from typing import Callable
 
 from lxml import html
 
@@ -144,7 +145,11 @@ class _CappedZlib:
         return SimpleNamespace(decompress=lambda data: self.decompress(data, inflater))
 
 
-def _pdf_blocks(content: bytes) -> list[tuple[str, str, TableRow | None, int | None]]:
+Transcriber = Callable[[bytes], str]  # PNG bytes of one page to its text
+
+
+def _pdf_blocks(content: bytes, transcribe: Transcriber | None,
+                flags: list[str]) -> list[tuple[str, str, TableRow | None, int | None]]:
     import pdfplumber
     from pdfminer import pdftypes
 
@@ -152,17 +157,27 @@ def _pdf_blocks(content: bytes) -> list[tuple[str, str, TableRow | None, int | N
     blocks = []
     with pdfplumber.open(io.BytesIO(content)) as pdf:
         for number, page in enumerate(pdf.pages, start=1):
-            for paragraph in re.split(r"\n\s*\n", page.extract_text() or ""):
+            text = page.extract_text() or ""
+            if not text.strip() and transcribe is not None:
+                # The page is an image. Text read from it by a model is flagged, because a
+                # quote from it has not been checked against a text layer.
+                picture = io.BytesIO()
+                page.to_image(resolution=150).original.save(picture, format="PNG")
+                text = transcribe(picture.getvalue())
+                if "ocr_text" not in flags:
+                    flags.append("ocr_text")
+            for paragraph in re.split(r"\n\s*\n", text):
                 if normalize(paragraph):
                     blocks.append(("paragraph", normalize(paragraph), None, number))
     return blocks
 
 
-def parse(document_id: str, content: bytes, media_type: str) -> tuple[str, list[SourceSpan], list[str]]:
+def parse(document_id: str, content: bytes, media_type: str,
+          transcribe: Transcriber | None = None) -> tuple[str, list[SourceSpan], list[str]]:
     """Return (normalized text, spans, quality flags)."""
     flags: list[str] = []
     if media_type == "application/pdf":
-        blocks = _pdf_blocks(content)
+        blocks = _pdf_blocks(content, transcribe, flags)
         if not blocks:
             flags.append("no_text_layer")
     elif media_type == "text/plain":

@@ -83,3 +83,23 @@ def test_utf8_without_a_declared_charset_is_read_as_utf8():
 def test_only_footnote_markers_make_a_footnote():
     spans = parse("d", b'<p id="cite_note-3">A cited note.</p><p class="footnote">A footnote.</p>', "text/html")[1]
     assert [s.kind for s in spans] == ["paragraph", "footnote"]
+
+
+def _image_only_pdf():
+    import io
+
+    from PIL import Image, ImageDraw
+
+    picture = Image.new("RGB", (900, 300), "white")
+    ImageDraw.Draw(picture).text((40, 120), "Emissions fell 40% in 2025.", fill="black")
+    out = io.BytesIO()
+    picture.save(out, format="PDF")
+    return out.getvalue()
+
+
+def test_image_only_pdf_is_transcribed_and_flagged():
+    pdf = _image_only_pdf()
+    assert parse("d", pdf, "application/pdf")[2] == ["no_text_layer"]
+    text, spans, flags = parse("d", pdf, "application/pdf",
+                               transcribe=lambda png: "Emissions fell 40% in 2025." if png[:4] == b"\x89PNG" else "")
+    assert text == "Emissions fell 40% in 2025." and flags == ["ocr_text"] and spans[0].page == 1

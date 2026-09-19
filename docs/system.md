@@ -48,8 +48,9 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
 - The cumulative and tempered updaters (ablations A6 and A7) are not called by the worker. The
   accumulator arithmetic exists and is tested.
 - Abstention by expected loss (section 11.2) is not implemented. It needs a calibrated probability.
-- PDF parsing extracts page text only. It does not read tables or bounding boxes. A PDF with no
-  text layer gets the `no_text_layer` flag and no passages. There is no OCR fallback.
+- PDF parsing extracts page text only. It does not read tables or bounding boxes. A page with no
+  text layer is read by an OpenAI vision call and the document gets the `ocr_text` flag. Without
+  OpenAI, or for a PDF sent as `content` (JSON cannot carry its bytes), it gets `no_text_layer`.
 - The first row of an HTML table is treated as its header row. A table with no header row loses
   its first data row.
 - Authentication is one shared API key. There are no users or tenants.

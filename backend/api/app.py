@@ -56,7 +56,11 @@ def default_deps() -> Deps:
             index = ElasticIndex()
     else:
         index = MemoryIndex()
-    router = compressor = None
+    router = compressor = transcribe = None
+    try:
+        transcribe = OpenAILLM().transcribe
+    except ProviderError:
+        pass  # without OpenAI, an image-only PDF keeps the no_text_layer flag
     if env("TYPESAFE_API_KEY"):
         from backend.providers.jev import JevRouter
         router = JevRouter()
@@ -64,7 +68,7 @@ def default_deps() -> Deps:
         from backend.providers.ttc import TokenCompanyCompressor
         compressor = TokenCompanyCompressor()
     return Deps(store=store, index=index, settings=settings, llm_factory=OpenAILLM,
-                router=router, compressor=compressor)
+                router=router, compressor=compressor, transcribe=transcribe)
 
 
 def create_app(deps: Deps | None = None) -> FastAPI:
@@ -94,13 +98,15 @@ def create_app(deps: Deps | None = None) -> FastAPI:
     def create_document(request: DocumentRequest, d: Deps = Depends(get_deps)):
         try:
             if request.url:
-                snapshot, spans = admit_url(d.store, request.url, published_at=request.published_at)
+                snapshot, spans = admit_url(d.store, request.url, published_at=request.published_at,
+                                            transcribe=d.transcribe)
             elif request.content:
                 snapshot, spans = admit(d.store, request.content.encode(), request.media_type,
-                                        published_at=request.published_at)
+                                        published_at=request.published_at,
+                                        transcribe=d.transcribe)
             else:
                 raise HTTPException(422, "provide url or content")
-        except (FetchError, BlockedDestination) as exc:
+        except (FetchError, BlockedDestination, ProviderError) as exc:
             raise HTTPException(400, str(exc)) from exc
         d.index.index(snapshot, spans)
         return snapshot

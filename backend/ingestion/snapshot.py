@@ -22,8 +22,8 @@ def object_dir() -> Path:
 
 
 def admit(store: Store, content: bytes, media_type: str, url: str | None = None,
-          published_at: datetime | None = None,
-          admissible_from: datetime | None = None) -> tuple[DocumentSnapshot, list[SourceSpan]]:
+          published_at: datetime | None = None, admissible_from: datetime | None = None,
+          transcribe: parser.Transcriber | None = None) -> tuple[DocumentSnapshot, list[SourceSpan]]:
     digest = hashlib.sha256(content).hexdigest()
     document_id = f"doc-{digest[:16]}"
     existing = store.get("documents", document_id, DocumentSnapshot)
@@ -34,7 +34,7 @@ def admit(store: Store, content: bytes, media_type: str, url: str | None = None,
         admissible_from = existing.admissible_from or admissible_from
     (object_dir() / digest).write_bytes(content)
     try:
-        text, spans, flags = parser.parse(document_id, content, media_type)
+        text, spans, flags = parser.parse(document_id, content, media_type, transcribe)
     except Exception as exc:
         raise FetchError(f"cannot parse document: {exc}") from exc
     (object_dir() / f"{digest}.txt").write_text(text)
@@ -48,9 +48,9 @@ def admit(store: Store, content: bytes, media_type: str, url: str | None = None,
     return snapshot, spans
 
 
-def admit_url(store: Store, url: str, **dates) -> tuple[DocumentSnapshot, list[SourceSpan]]:
+def admit_url(store: Store, url: str, **options) -> tuple[DocumentSnapshot, list[SourceSpan]]:
     content, media_type, final_url = fetch(url)
-    return admit(store, content, media_type, url=final_url, **dates)
+    return admit(store, content, media_type, url=final_url, **options)
 
 
 def normalized_text(snapshot: DocumentSnapshot) -> str:
