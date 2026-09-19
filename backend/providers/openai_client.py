@@ -64,6 +64,10 @@ class OpenAILLM:
             raise ProviderError(f"openai {purpose} returned no parsed output")
         return response.output_parsed
 
+    def ask(self, purpose: str, instructions: str, payload: dict, schema: type[BaseModel]):
+        """One structured call on the reasoning model, for a baseline that is a single prompt."""
+        return self._parse(purpose, self.reason_model, instructions, payload, schema)
+
     def _record(self, call: ProviderCall) -> None:
         if self.manifest is not None:
             self.manifest.calls.append(call)
