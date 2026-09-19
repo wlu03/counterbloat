@@ -4,6 +4,11 @@ import { NextRequest } from "next/server";
 const BASE = process.env.COUNTERCHECK_API_URL ?? "http://localhost:8000";
 
 async function forward(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
+  // Another site's page must not be able to send requests that receive the API key.
+  const site = request.headers.get("sec-fetch-site");
+  if (site && site !== "same-origin" && site !== "none") {
+    return new Response("cross-site request refused", { status: 403 });
+  }
   const { path } = await context.params;
   const headers: Record<string, string> = {
     "X-API-Key": process.env.COUNTERCHECK_API_KEY ?? "",

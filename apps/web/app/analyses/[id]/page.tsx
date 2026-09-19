@@ -39,7 +39,6 @@ export default function AnalysisPage() {
     }
     load();
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const finding = findings.find((f) => f.claim_id === selected) ?? findings[0];
@@ -56,7 +55,7 @@ export default function AnalysisPage() {
         <aside>
           {finding ? <FindingPanel finding={finding} /> : <p>No findings yet.</p>}
           {detail && <EvidenceDrawer evidence={detail.evidence} calculations={detail.calculations} />}
-          {detail && <InvestigationView questions={detail.questions}
+          {detail && <InvestigationView questions={detail.questions} coverage={detail.coverage}
             updates={updates[finding!.claim_id] ?? []} stopReason={detail.stop_reason} />}
         </aside>
       </div>
