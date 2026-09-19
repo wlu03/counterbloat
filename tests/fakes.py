@@ -3,8 +3,8 @@ import re
 
 from backend.models import AnswerStatus, EvidenceStatus, Mechanism
 from backend.providers.base import (
-    ClaimDraft, EvidenceAnalysis, EvidenceJudgment, InputDraft, ProgramDraft, ProviderError,
-    QuestionAnswer, Report, ReviewResult, StateUpdate,
+    ClaimDraft, EvidenceAnalysis, EvidenceJudgment, EvidenceScoreDraft, InputDraft, ProgramDraft,
+    ProviderError, QuestionAnswer, Reassessment, Report, ReviewResult, StateUpdate,
 )
 from backend.models import CalcStep
 
@@ -103,6 +103,21 @@ class FakeLLM:
                            summary="The figures support lower emissions per unit, not lower totals.",
                            unresolved=[],
                            explanation=f"Totals computed from the report changed by {change}%.")
+
+    def reassess(self, target, claim, evidence, calculations, questions):
+        tested = [c for c in calculations if c.claim_relation == "disagrees"]
+        status = EvidenceStatus.contradicted if tested else EvidenceStatus.insufficient
+        return Reassessment(status=status, mechanisms=[Mechanism.scope] if tested else [],
+                            summary="Assessed from the active evidence only.", unresolved=[],
+                            explanation="", probability=0.9 if tested else None)
+
+    def score_evidence(self, target, claim, evidence, calculations):
+        # A fixed synthetic value per group, larger when a linked calculation disagrees.
+        self.score_calls = getattr(self, "score_calls", 0) + 1
+        tested = any(c.claim_relation == "disagrees" for c in calculations)
+        return EvidenceScoreDraft(log_evidence=1.5 if tested else 0.25,
+                                  supporting_evidence_ids=[e.id for e in evidence],
+                                  short_basis="scripted value for tests")
 
     def review(self, state, decisive):
         return ReviewResult(decision="accept", narrowed_status=None, reasons=[])

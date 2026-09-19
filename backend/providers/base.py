@@ -6,8 +6,9 @@ from typing import Literal, Protocol
 from pydantic import BaseModel
 
 from backend.models import (
-    AnswerStatus, AssertionType, CalcStep, Claim, EvidenceOrigin, EvidenceStatus,
-    InvestigationState, Mechanism, Relationship, SourceSpan, VerificationQuestion,
+    AnswerStatus, AssertionType, CalcStep, Calculation, Claim, EvidenceItem, EvidenceOrigin,
+    EvidenceStatus, InvestigationState, Mechanism, Relationship, ScoringTarget, SourceSpan,
+    VerificationQuestion,
 )
 
 
@@ -100,6 +101,17 @@ class StateUpdate(BaseModel):
     explanation: str
 
 
+class Reassessment(StateUpdate):
+    # Experimental estimate that the target's positive hypothesis holds, or null.
+    probability: float | None
+
+
+class EvidenceScoreDraft(BaseModel):
+    log_evidence: float
+    supporting_evidence_ids: list[str]
+    short_basis: str
+
+
 class ReviewResult(BaseModel):
     decision: Literal["accept", "narrow", "reject", "request_check"]
     narrowed_status: EvidenceStatus | None
@@ -132,6 +144,11 @@ class LLM(Protocol):
                          context: str) -> EvidenceAnalysis: ...
     def update_state(self, state: InvestigationState, new_evidence_ids: list[str],
                      new_calculation_ids: list[str]) -> StateUpdate: ...
+    def reassess(self, target: ScoringTarget, claim: Claim, evidence: list[EvidenceItem],
+                 calculations: list[Calculation],
+                 questions: list[VerificationQuestion]) -> Reassessment: ...
+    def score_evidence(self, target: ScoringTarget, claim: Claim, evidence: list[EvidenceItem],
+                       calculations: list[Calculation]) -> EvidenceScoreDraft: ...
     def review(self, state: InvestigationState, decisive: list[SourceSpan]) -> ReviewResult: ...
     def report(self, state: InvestigationState, decisive: list[SourceSpan]) -> Report: ...
     def embed(self, texts: list[str]) -> list[list[float]]: ...

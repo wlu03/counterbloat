@@ -24,8 +24,12 @@ class Optimization(BaseModel):
 
 
 class AssessmentSettings(BaseModel):
-    # The code implements only these values. Any other value fails when the file is loaded.
-    updater: Literal["linguistic"] = "linguistic"
+    # Any other value fails when the file is loaded.
+    updater: Literal["linguistic", "full_context", "evidence_accumulator"] = "linguistic"
+    # Prior and tempering of the experimental accumulator. 0.5 is a neutral scenario prior. It
+    # was not estimated from data.
+    prior: float = 0.5
+    tempering: float = 1.0
     public_numeric_probability: Literal[False] = False
     review_original_decisive_evidence: Literal[True] = True
 
@@ -33,6 +37,7 @@ class AssessmentSettings(BaseModel):
 class Settings(BaseModel):
     mode: Mode = Mode.live
     max_investigation_rounds: int = 2
+    max_follow_up_rounds: int = 1  # extra rounds a reviewer's request for a check may use
     retrieval: Retrieval = Retrieval()
     optimization: Optimization = Optimization()
     assessment: AssessmentSettings = AssessmentSettings()

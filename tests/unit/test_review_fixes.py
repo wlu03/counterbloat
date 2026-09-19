@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from backend.assessment.review import finalize, numbers_supported
+from backend.assessment.review import finalize, numbers_supported, run_review
 from backend.belief.state import apply_update
 from backend.claims.extract import valid
 from backend.config import Settings
@@ -59,7 +59,7 @@ def _state_with_context():
 
 def test_review_cannot_strengthen_a_verdict():
     state, spans = _state_with_context()
-    finding = finalize(state, spans, _Narrowing())
+    finding = finalize(state, spans, _Narrowing(), run_review(state, spans, _Narrowing()))
     assert finding.evidence_status == EvidenceStatus.insufficient
 
 
@@ -68,7 +68,8 @@ def test_a_claim_with_no_evidence_skips_the_review_calls():
         def review(self, state, decisive):
             raise AssertionError("review must not be called")
 
-    finding = finalize(InvestigationState(claim=_claim()), {}, Unreachable())
+    empty = InvestigationState(claim=_claim())
+    finding = finalize(empty, {}, Unreachable(), run_review(empty, {}, Unreachable()))
     assert finding.evidence_status == EvidenceStatus.insufficient
     assert finding.summary.startswith("No evidence")
 
@@ -134,5 +135,5 @@ class _Inventing(_Narrowing):
 
 def test_summary_with_numbers_no_calculation_produced_is_replaced():
     state, spans = _state_with_context()
-    finding = finalize(state, spans, _Inventing())
+    finding = finalize(state, spans, _Inventing(), run_review(state, spans, _Inventing()))
     assert "10,000" not in finding.summary and finding.summary.startswith("Assessment:")

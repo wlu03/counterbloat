@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from backend.belief.priority import critical_open
 from backend.models import (
-    EvidenceStatus, Finding, InvestigationState, ReviewState, RunManifest, SourceSpan, Uncertainty,
+    Assessment, EvidenceStatus, Finding, InvestigationState, ReviewState, RunManifest, SourceSpan, Uncertainty,
 )
 from backend.providers.base import LLM, ProviderError, Report, ReviewResult
 from backend.verification.numeric import CalculationError, execute, value_in_source
@@ -48,8 +48,23 @@ def numbers_supported(text: str, state: InvestigationState, spans: dict[str, Sou
                                    for v in outputs) for n in _numbers(text))
 
 
+def run_review(state: InvestigationState, spans: dict[str, SourceSpan], llm: LLM,
+               manifest: RunManifest | None = None) -> ReviewResult | None:
+    """Ask for a review when there is something to review. None means no review was made."""
+    if citation_errors(state, spans) or not (state.evidence or state.calculations):
+        return None
+    decisive = [spans[e.span_id] for e in state.evidence if e.span_id in spans]
+    try:
+        return llm.review(state, decisive)
+    except ProviderError as exc:
+        if manifest is not None:
+            manifest.errors.append(str(exc))
+        return None
+
+
 def finalize(state: InvestigationState, spans: dict[str, SourceSpan], llm: LLM,
-             cutoff: datetime | None = None, manifest: RunManifest | None = None) -> Finding:
+             review: ReviewResult | None, cutoff: datetime | None = None,
+             manifest: RunManifest | None = None) -> Finding:
     claim = state.claim
     fallback = f"Assessment: {state.assessment.status}. See the evidence and calculations."
 
@@ -75,26 +90,36 @@ def finalize(state: InvestigationState, spans: dict[str, SourceSpan], llm: LLM,
         finding.summary = "No evidence for this claim was found in the allowed sources."
         return finding
     decisive = [spans[e.span_id] for e in state.evidence if e.span_id in spans]
+    if review is None:
+        finding.uncertainty.measurement_limitations = ["review did not run"]
+        return finding
+    # Review reasons are model text, so they follow the same number rule as the summary.
+    reasons = [r for r in review.reasons if numbers_supported(r, state, spans)]
+    weaker = (EvidenceStatus.mixed, EvidenceStatus.insufficient, EvidenceStatus.not_yet_resolvable)
+    decided = state.assessment.status in (EvidenceStatus.supported, EvidenceStatus.contradicted)
+    if review.decision == "reject":
+        state.assessment = Assessment(status=EvidenceStatus.insufficient,
+                                      summary="Review rejected the proposed conclusion.")
+    elif review.decision == "narrow" and review.narrowed_status in weaker and decided:
+        # A review can weaken a verdict. It cannot introduce supported or contradicted.
+        state.assessment.status = review.narrowed_status
+    finding.evidence_status = state.assessment.status
+    finding.mechanisms = state.assessment.mechanisms
+    if review.decision == "reject":
+        finding.summary = state.assessment.summary
+        finding.uncertainty.measurement_limitations = reasons
+        return finding
+    if review.decision == "request_check":
+        finding.uncertainty.critical_missing_questions += [
+            f"Review requested a check that was not completed: {r}" for r in review.reasons]
     try:
-        review: ReviewResult = llm.review(state, decisive)
+        # The report is written from the reviewed assessment, not the one the review started from.
         report: Report = llm.report(state, decisive)
     except ProviderError as exc:
         if manifest is not None:
             manifest.errors.append(str(exc))
-        finding.uncertainty.measurement_limitations = [f"review did not run: {exc}"]
+        finding.uncertainty.measurement_limitations = [f"report did not run: {exc}"]
         return finding
-    # Review reasons are model text, so they follow the same number rule as the summary.
-    reasons = [r for r in review.reasons if numbers_supported(r, state, spans)]
-    if review.decision == "reject":
-        finding.evidence_status, finding.mechanisms = EvidenceStatus.insufficient, []
-        finding.summary = "Review rejected the proposed conclusion."
-        finding.uncertainty.measurement_limitations = reasons
-        return finding
-    weaker = (EvidenceStatus.mixed, EvidenceStatus.insufficient, EvidenceStatus.not_yet_resolvable)
-    decided = finding.evidence_status in (EvidenceStatus.supported, EvidenceStatus.contradicted)
-    if review.decision == "narrow" and review.narrowed_status in weaker and decided:
-        # A review can weaken a verdict. It cannot introduce supported or contradicted.
-        finding.evidence_status = review.narrowed_status
     finding.summary = checked(report.summary)
     if report.supported_rewrite and numbers_supported(report.supported_rewrite, state, spans):
         finding.supported_rewrite = report.supported_rewrite

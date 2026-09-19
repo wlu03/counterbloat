@@ -150,6 +150,12 @@ class EvidenceItem(BaseModel):
     claim_id: str
     span_id: str
     document_id: str
+    # The source version and date, the round that retrieved the passage, and where it sits.
+    document_sha256: str | None = None
+    published_at: datetime | None = None
+    round: int = 0
+    start: int | None = None
+    end: int | None = None
     quote: str
     relationship: Relationship
     target: str  # "claim" or a question id
@@ -165,6 +171,7 @@ class EvidenceGroup(BaseModel):
     member_ids: list[str]
     version: int = 1
     active: bool = True
+    history: list[str] = []  # corrections, withdrawals, and merges, oldest first
 
 
 class CalcInput(BaseModel):
@@ -206,8 +213,50 @@ class Assessment(BaseModel):
     summary: str = ""
 
 
+class ScoringTarget(BaseModel):
+    """What a numeric score is a score of. A score is meaningless without its target."""
+    id: str
+    claim_id: str
+    claim_version: int
+    hypothesis: str
+    label_space: list[str]
+    rubric: str
+    cutoff: datetime | None = None
+    protocol: str  # the population or dataset protocol the score applies to
+
+
+class EvidenceScore(BaseModel):
+    group_id: str
+    group_version: int
+    # Positive values favour the target's positive hypothesis, negative values its alternative.
+    log_evidence: float
+    method: str  # llm_estimated | learned | validated_observation_model
+    supporting_evidence_ids: list[str]
+    short_basis: str
+    conditioning_context_hash: str
+    scorer_version: str
+
+
+class NumericBelief(BaseModel):
+    """Experimental score for one target. It is not shown as a public probability."""
+    target_id: str
+    method: str  # evidence_accumulator | full_context
+    prior: float | None = None
+    prior_provenance: str = ""
+    raw_logit: float | None = None
+    raw_probability: float | None = None
+    calibrated_probability: float | None = None
+    calibration_status: str = "uncalibrated"
+    artifact_version: str | None = None
+    contributions: list[EvidenceScore] = []
+
+
 class InvestigationState(BaseModel):
     claim: Claim
+    target: ScoringTarget | None = None
+    belief: NumericBelief | None = None
+    scores: list[EvidenceScore] = []  # the latest score of each provenance group
+    last_input_hash: str = ""  # input of the last committed update, used to skip repeats
     questions: list[VerificationQuestion] = []
     evidence: list[EvidenceItem] = []
     groups: list[EvidenceGroup] = []
@@ -228,9 +277,12 @@ class BeliefUpdate(BaseModel):
     changed_evidence_ids: list[str]
     changed_calculation_ids: list[str] = []
     explanation: str
-    # Always None. No code sets these fields.
+    strategy: str = "linguistic"
+    input_state_hash: str = ""
+    # Raw experimental scores for the target, when the strategy produces one.
     previous_score: float | None = None
     new_score: float | None = None
+    belief: NumericBelief | None = None
     model_version: str = ""
 
 
@@ -269,6 +321,7 @@ class ProviderCall(BaseModel):
     cached_tokens: int = 0
     output_tokens: int = 0
     billing_unit: str = "tokens"
+    latency_ms: int | None = None
     error: str | None = None
 
 
@@ -276,6 +329,9 @@ class RunManifest(BaseModel):
     analysis_id: str
     mode: Mode
     config_hash: str
+    commit: str | None = None
+    updater: str = "linguistic"
+    embedding_search: bool | None = None  # False when search fell back to keywords only
     models: dict[str, str] = {}
     cutoff: datetime | None = None
     calls: list[ProviderCall] = []

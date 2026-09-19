@@ -3,18 +3,20 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 
 from openai import OpenAI
 from pydantic import BaseModel
 
 from backend.config import env
 from backend.models import (
-    Claim, InvestigationState, ProviderCall, RunManifest, SourceSpan, VerificationQuestion,
+    Calculation, Claim, EvidenceItem, InvestigationState, ProviderCall, RunManifest,
+    ScoringTarget, SourceSpan, VerificationQuestion,
 )
 from backend.providers import prompts
 from backend.providers.base import (
-    ClaimDraft, ClaimDrafts, EvidenceAnalysis, ProviderError, QuestionDraft, QuestionDrafts,
-    Report, ReviewResult, StateUpdate,
+    ClaimDraft, ClaimDrafts, EvidenceAnalysis, EvidenceScoreDraft, ProviderError, QuestionDraft,
+    QuestionDrafts, Reassessment, Report, ReviewResult, StateUpdate,
 )
 
 
@@ -36,6 +38,7 @@ class OpenAILLM:
     def _parse(self, purpose: str, model: str, instructions: str, payload: dict,
                schema: type[BaseModel]):
         call = ProviderCall(provider="openai", purpose=purpose, model=model)
+        started = time.monotonic()
         try:
             response = self.client.responses.parse(
                 model=model,
@@ -49,6 +52,7 @@ class OpenAILLM:
             call.error = str(exc)
             self._record(call)
             raise ProviderError(f"openai {purpose} failed: {exc}") from exc
+        call.latency_ms = int((time.monotonic() - started) * 1000)
         usage = response.usage
         if usage is not None:
             call.input_tokens = usage.input_tokens
@@ -87,6 +91,23 @@ class OpenAILLM:
         payload = {"state": state.model_dump(mode="json"), "new_evidence_ids": new_evidence_ids,
                    "new_calculation_ids": new_calculation_ids}
         return self._parse("update", self.reason_model, prompts.UPDATER, payload, StateUpdate)
+
+    def reassess(self, target: ScoringTarget, claim: Claim, evidence: list[EvidenceItem],
+                 calculations: list[Calculation],
+                 questions: list[VerificationQuestion]) -> Reassessment:
+        payload = {"target": target.model_dump(mode="json"), "claim": claim.model_dump(mode="json"),
+                   "evidence": [e.model_dump(mode="json") for e in evidence],
+                   "calculations": [c.model_dump(mode="json") for c in calculations],
+                   "questions": [q.model_dump(mode="json") for q in questions]}
+        return self._parse("reassess", self.reason_model, prompts.REASSESSOR, payload, Reassessment)
+
+    def score_evidence(self, target: ScoringTarget, claim: Claim, evidence: list[EvidenceItem],
+                       calculations: list[Calculation]) -> EvidenceScoreDraft:
+        payload = {"target": target.model_dump(mode="json"), "claim": claim.model_dump(mode="json"),
+                   "evidence": [e.model_dump(mode="json") for e in evidence],
+                   "calculations": [c.model_dump(mode="json") for c in calculations]}
+        return self._parse("score", self.reason_model, prompts.SCORER, payload,
+                           EvidenceScoreDraft)
 
     def review(self, state: InvestigationState, decisive: list[SourceSpan]) -> ReviewResult:
         payload = {"state": state.model_dump(mode="json"),

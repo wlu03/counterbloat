@@ -47,14 +47,38 @@ def reconcile(state: InvestigationState, items: list[EvidenceItem],
     return evidence_hash(state.groups) != before
 
 
-def withdraw(state: InvestigationState, evidence_id: str) -> None:
-    """Remove an item from the active ledger. Stored history is kept by the caller."""
+def withdraw(state: InvestigationState, evidence_id: str, reason: str = "withdrawn") -> None:
+    """Remove an item from the active ledger and drop what depended on it.
+
+    The group keeps a history entry. A calculation that read its inputs from a group that is no
+    longer active is removed, because its inputs are no longer admitted.
+    """
     state.evidence = [e for e in state.evidence if e.id != evidence_id]
     for group in state.groups:
         if evidence_id in group.member_ids:
             group.member_ids.remove(evidence_id)
             group.version += 1
             group.active = bool(group.member_ids)
+            group.history.append(f"v{group.version}: {evidence_id} {reason}")
+    active = {g.id for g in state.groups if g.active}
+    state.calculations = [c for c in state.calculations if set(c.lineage) <= active]
+
+
+def merge(state: InvestigationState, keep_id: str, drop_id: str) -> None:
+    """Record that two groups are one observation. Their earlier scores no longer apply."""
+    groups = {g.id: g for g in state.groups}
+    keep, drop = groups[keep_id], groups[drop_id]
+    keep.member_ids += drop.member_ids
+    keep.version += 1
+    keep.history.append(f"v{keep.version}: merged {drop_id}")
+    drop.member_ids, drop.active = [], False
+    drop.version += 1
+    drop.history.append(f"v{drop.version}: merged into {keep_id}")
+    for item in state.evidence:
+        if item.group_id == drop_id:
+            item.group_id = keep_id
+    for calculation in state.calculations:
+        calculation.lineage = sorted({keep_id if g == drop_id else g for g in calculation.lineage})
 
 
 def lineage(state: InvestigationState, span_ids: list[str]) -> list[str]:
