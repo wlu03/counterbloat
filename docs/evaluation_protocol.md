@@ -1,21 +1,106 @@
 # Evaluation protocol
 
-No evaluation has been run. This file states how to run one.
+No dataset experiment has been run. The commands below exist and are covered by tests that use
+scripted providers. The only results produced so far are the scripted replays of the two
+synthetic fixtures.
 
-1. Import each dataset with its adapter in `datasets/adapters/` and record a manifest with
-   `datasets/manifests/manifest.py` (file hash, row count, revision, license, field mapping).
-2. Export with `datasets.adapters.base.export`. It writes model inputs and gold labels to separate
-   files. Put the gold file in `gold/`, which the worker does not read and git ignores.
-3. Use `config/evaluation.yaml`: frozen mode, no external discovery.
-4. Use each dataset for its own task: claim detection (environmental_claims), question-based
-   verification (AVeriTeC), numerical programs (FinQA), document question answering (FinanceBench),
-   case review (GreenClaims). Do not relabel any of them as overstatement labels.
-5. Compare systems A0 to A5 from `evaluation/ablations/` on the same cases and the same retrieval
-   budget. For compression comparisons, freeze the retrieved passages first.
-6. Report the metrics in `evaluation/components/metrics.py`. Selective error is undefined when no
-   case is accepted. Report cost from the run manifest, including failed calls and fallbacks.
-7. Keep demo cases out of the test set. Lock the configuration before scoring the test set.
+## Deterministic suite
 
-`uv run pytest` covers the deterministic checks: arithmetic on the fictional emissions example,
-duplicate evidence, withdrawal, ordering, cutoff admissibility, protected-text retention, quote
-validation, and blocked fetch destinations.
+    uv run pytest
+
+No keys, services, or network. It covers the arithmetic of the fictional emissions example, the
+order of calculation and update, the link between a calculation and the claim, duplicate
+groups and duplicate events, retries, corrections, withdrawals, merges, removed sole support,
+missing and unusable scores, compression damage, provider failure, review changes and follow-up,
+the historical cutoff, label isolation, and the null public probability.
+
+## Fixed-evidence replay of the three strategies
+
+    uv run python -m evaluation.replay.run --trace evaluation/fixtures/mechanics.json \
+        --prior 0.2 --out results/replay_mechanics.json
+    uv run python -m evaluation.replay.run --trace evaluation/fixtures/emissions.json \
+        --out results/replay_emissions.json
+
+The default provider is scripted: the status follows a fixed rule and the scores are the ones
+saved in the trace. It checks ordering, duplicates, irrelevant additions, corrections, and
+withdrawals without any paid call. The seed (default 7) is written to the result.
+
+To replay a stored investigation, export it first:
+
+    uv run python -m evaluation.replay.trace ANALYSIS_ID CLAIM_ID --out results/trace.json
+
+To replay with the real models, which is paid and bounded by `--max-calls`:
+
+    uv run --env-file .env python -m evaluation.replay.run --trace results/trace.json \
+        --provider openai --permutations 1 --max-calls 120 --out results/replay_live.json
+
+## Budgeted live smoke test
+
+    uv run --env-file .env python -m evaluation.smoke --max-calls 25 --out results/smoke.json
+
+One run of the fictional emissions report through the real providers with the accumulator. The
+command fails if any finding carries a public probability.
+
+## Dataset preparation
+
+    uv run python -m datasets.prepare averitec PATH/TO/LOCAL/FILE.json --revision REVISION --split dev
+
+The file must already be on disk. Nothing is downloaded. Obtain each dataset from its publisher
+under its license. The command writes `prepared/DATASET/SPLIT.visible.jsonl` (runtime inputs),
+`gold/DATASET/SPLIT.jsonl` (labels, owner-readable only), and a manifest with the file hash, row
+count, revision, license, and field names. `prepared/`, `gold/`, and `results/` are ignored by
+git.
+
+A system under test reads three things and nothing else: the visible file, the searchable file,
+and its own store. The searchable file is supplied by the user, one row per document:
+`{"example_id", "content", "media_type"?, "url"?, "published_at"?}`. Each example gets a fresh
+store and index that hold only its own searchable documents. The gold file is opened by the
+`score` command only.
+
+Datasets keep their own labels. environmental_claims measures claim detection. AVeriTeC measures
+agreement between the evidence status and the dataset verdict, and its scoring target is the
+dataset's Refuted label, not overstatement.
+
+## Baseline against the structured pipeline
+
+    uv run --env-file .env python -m evaluation.experiments.run verify --dataset averitec \
+        --visible prepared/averitec/dev.visible.jsonl --searchable SEARCHABLE.jsonl \
+        --system A1 --limit 20 --max-calls 200 --out results/averitec_A1.jsonl
+    uv run --env-file .env python -m evaluation.experiments.run verify --dataset averitec \
+        --visible prepared/averitec/dev.visible.jsonl --searchable SEARCHABLE.jsonl \
+        --system A2 --updater evidence_accumulator --limit 20 --max-calls 600 \
+        --out results/averitec_A2.jsonl
+    uv run python -m evaluation.experiments.run score --dataset averitec \
+        --predictions results/averitec_A2.jsonl --gold gold/averitec/dev.jsonl \
+        --prices PRICES.json --out results/averitec_A2.score.json
+
+A1 is one search on the claim text and one judgment. A2 is the structured pipeline. Both use the
+same searchable documents and the same in-memory keyword index, and each prediction records
+that no vector search took place. Examples past the call budget are written as `not_run` and
+are left out of the score. Brier score and negative log-likelihood cover only the examples that
+have a score, and are `unavailable` when none has. Cost is `unknown` unless the price list names
+every model that was used.
+
+## Jev and compression ablations
+
+    ... verify --system A3    # Jev routing
+    ... verify --system A4    # protected compression
+    ... verify --system A5    # both
+    uv run --env-file .env python -m evaluation.experiments.run detect \
+        --visible prepared/environmental_claims/test.visible.jsonl --jev --out results/detect_jev.jsonl
+
+Each prediction records calls by provider and purpose, failed calls, tokens by model, latency,
+passages excluded by the router, and compression fallbacks. For a compression comparison, use
+the same searchable file for both systems so that retrieval is the same.
+
+## Report
+
+    uv run python -m evaluation.report results --out results/report.md
+
+The report lists every replay result and every scored run found in the directory. A value that
+was not produced is written as unavailable.
+
+## Rules
+
+Keep demo cases out of any test set. Lock the configuration before scoring a test set. Do not
+relabel a dataset as overstatement labels. Selective error is undefined when no case is accepted.
