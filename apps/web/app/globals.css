@@ -1,0 +1,22 @@
+:root { --ink: #1a1a1a; --paper: #fbfaf7; --line: #d8d4ca; --mark: #ffe9a8; --accent: #1d4f91; }
+body { margin: 0; font: 16px/1.55 Georgia, serif; color: var(--ink); background: var(--paper); }
+header { padding: 12px 24px; border-bottom: 1px solid var(--line); font-family: system-ui, sans-serif; }
+header a { color: var(--ink); text-decoration: none; font-weight: 600; }
+main { padding: 24px; }
+.form { max-width: 720px; display: grid; gap: 12px; font-family: system-ui, sans-serif; }
+.form input, .form textarea { font: inherit; padding: 8px; border: 1px solid var(--line); }
+button { font: 14px system-ui, sans-serif; padding: 8px 14px; border: 1px solid var(--accent);
+  background: var(--accent); color: white; cursor: pointer; }
+.layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr); gap: 32px; }
+.reader p, .reader h2 { margin: 0 0 14px; }
+.reader .table_row, .reader .footnote { font: 14px/1.5 system-ui, sans-serif; color: #444; }
+mark { background: var(--mark); padding: 1px 2px; cursor: pointer; border-bottom: 2px solid #b58900; }
+mark .status { font: 11px system-ui, sans-serif; margin-left: 6px; text-transform: uppercase; }
+aside { font-family: system-ui, sans-serif; font-size: 14px; }
+aside section { border: 1px solid var(--line); background: white; padding: 14px; margin-bottom: 16px; }
+aside h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; }
+.status-label { font-weight: 600; }
+blockquote { margin: 8px 0; padding-left: 10px; border-left: 3px solid var(--line); }
+.link { background: none; border: none; color: var(--accent); padding: 0; text-decoration: underline; }
+ul { padding-left: 18px; margin: 6px 0; }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
