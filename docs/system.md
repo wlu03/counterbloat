@@ -54,10 +54,14 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
   its first data row.
 - Authentication is one shared API key. There are no users or tenants.
 - The run manifest records model identifiers, the prompt and checklist versions, the configuration
-  hash, the cutoff, provider calls with token counts, and errors. It does not record SDK versions,
-  a corpus hash, a code hash, or cost.
+  hash, the cutoff, OpenAI and Token Company calls with token counts, and errors. It does not
+  record a successful Jev call, a passage that routing excluded, SDK versions, a corpus hash, a
+  code hash, or cost.
 - Jev and Token Company calls are tried once. A job runs as a FastAPI background task and cannot
   resume, so a server restart leaves it `running`.
 - `Claim.version` is always 1. A newly found qualification does not create a new claim version.
 - The interactive API pages at `/docs` and `/openapi.json` do not require the API key.
+- sec.gov and bp.com refuse the fetcher's User-Agent with 403. Such documents must be uploaded.
+- Text made block-level only by CSS is joined without a space. A claim that appears only in a
+  table cell is not extracted, because table rows are evidence passages, not claim candidates.
 - No result has been measured on any dataset.
