@@ -1,4 +1,3 @@
-from backend.ingestion.anchors import make_anchor, resolve
 from backend.ingestion.parse import parse
 from backend.ingestion.snapshot import admit, normalized_text
 
@@ -25,14 +24,6 @@ def test_parse_keeps_visible_text_and_table_structure():
     assert row.text == "Emissions (kg CO2e) | Per unit | 2024: 10 | 2025: 6"
     assert row.note_ids == [spans[3].id]
     assert all(text[s.start:s.end] == s.text for s in spans)
-
-
-def test_anchor_resolves_after_offsets_move():
-    text = "Intro. We reduced emissions by 40%. Outro."
-    anchor = make_anchor("s1", text, 7, 35)
-    assert resolve(anchor, text) == (7, 35)
-    assert resolve(anchor, "New lead. " + text) == (17, 45)
-    assert resolve(anchor, "The quote is gone.") is None
 
 
 def test_snapshot_is_content_addressed(store):

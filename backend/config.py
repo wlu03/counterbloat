@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import os
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel
@@ -23,9 +24,10 @@ class Optimization(BaseModel):
 
 
 class AssessmentSettings(BaseModel):
-    updater: str = "linguistic"
-    public_numeric_probability: bool = False
-    review_original_decisive_evidence: bool = True
+    # The code implements only these values. Any other value fails when the file is loaded.
+    updater: Literal["linguistic"] = "linguistic"
+    public_numeric_probability: Literal[False] = False
+    review_original_decisive_evidence: Literal[True] = True
 
 
 class Settings(BaseModel):

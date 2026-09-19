@@ -117,7 +117,6 @@ class Report(BaseModel):
 
 class Route(BaseModel):
     is_claim: bool
-    assertion_type: AssertionType | None = None
     confidence: float = 0.0
 
 

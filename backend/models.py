@@ -165,7 +165,6 @@ class EvidenceGroup(BaseModel):
     member_ids: list[str]
     version: int = 1
     active: bool = True
-    derived_from: list[str] = []
 
 
 class CalcInput(BaseModel):
@@ -212,7 +211,6 @@ class InvestigationState(BaseModel):
     unresolved: list[str] = []
     version: int = 0
     round: int = 0
-    evidence_hash: str = ""
     stop_reason: str | None = None
 
 
@@ -224,7 +222,7 @@ class BeliefUpdate(BaseModel):
     new_status: EvidenceStatus
     changed_evidence_ids: list[str]
     explanation: str
-    # Scores stay None unless the experimental accumulator is enabled.
+    # Always None. No code sets these fields.
     previous_score: float | None = None
     new_score: float | None = None
     model_version: str = ""

@@ -1,4 +1,4 @@
-"""HTTP API (specification section 13.3). Every route requires the application key."""
+"""HTTP API (specification section 13.3). Every endpoint defined here requires the application key."""
 from __future__ import annotations
 
 import uuid
@@ -7,13 +7,14 @@ from datetime import datetime
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
+from backend.belief.priority import coverage
 from backend.config import env, load_settings
 from backend.db import Store
 from backend.ingestion.fetch import BlockedDestination, FetchError
 from backend.ingestion.snapshot import admit, admit_url, normalized_text
 from backend.models import (
-    Calculation, Claim, DocumentSnapshot, EvidenceItem, Finding, InvestigationState, ReviewState,
-    SourceSpan,
+    Calculation, Claim, DocumentSnapshot, EvidenceItem, Finding, InvestigationState, Mode,
+    ReviewState, SourceSpan,
 )
 from backend.orchestration.worker import Deps, run_analysis
 from backend.providers.base import ProviderError
@@ -29,7 +30,7 @@ class DocumentRequest(BaseModel):
 
 class AnalysisRequest(BaseModel):
     document_id: str
-    mode: str | None = None
+    mode: Mode | None = None
     cutoff: datetime | None = None
     selected_span_ids: list[str] = []
 
@@ -144,6 +145,7 @@ def create_app(deps: Deps | None = None) -> FastAPI:
         latest = states[-1] if states else None
         return {"claim": claim, "questions": latest.questions if latest else [],
                 "evidence": latest.evidence if latest else [],
+                "coverage": coverage(latest.questions) if latest else 0.0,
                 "calculations": d.store.find("calculations", Calculation, claim_id=claim_id),
                 "stop_reason": latest.stop_reason if latest else None}
 

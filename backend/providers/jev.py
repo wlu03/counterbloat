@@ -4,7 +4,6 @@ from __future__ import annotations
 import httpx
 
 from backend.config import env
-from backend.models import AssertionType
 from backend.providers.base import ProviderError, Route
 
 URL = "https://api.typesafe.ai/v1/systemone"
@@ -41,6 +40,4 @@ class JevRouter:
             confidence = float(answer["confidence"])
         except Exception as exc:
             raise ProviderError(f"jev route failed: {exc}") from exc
-        if choice == "none":
-            return Route(is_claim=False, confidence=confidence)
-        return Route(is_claim=True, assertion_type=AssertionType(choice), confidence=confidence)
+        return Route(is_claim=choice != "none", confidence=confidence)
