@@ -48,14 +48,15 @@ def reconcile(state: InvestigationState, items: list[EvidenceItem],
         item.repeats_span_id = repeats.get(item.span_id)
         original = by_span.get(item.repeats_span_id or "")
         if original is not None and original.group_id:
-            item.group_id = original.group_id
+            group_id = original.group_id
             item.origin = EvidenceOrigin.third_party_repetition
         else:
-            item.group_id = by_text.get(_family_key(item.quote), _family_key(item.quote))
-            while item.group_id in groups and groups[item.group_id].merged_into:
-                item.group_id = groups[item.group_id].merged_into  # follow an earlier merge
-        by_text.setdefault(_family_key(item.quote), item.group_id)
-        group = groups.setdefault(item.group_id, EvidenceGroup(id=item.group_id, member_ids=[]))
+            group_id = by_text.get(_family_key(item.quote), _family_key(item.quote))
+            if group_id in groups:
+                group_id = _current(state, group_id)  # follow an earlier merge
+        item.group_id = group_id
+        by_text.setdefault(_family_key(item.quote), group_id)
+        group = groups.setdefault(group_id, EvidenceGroup(id=group_id, member_ids=[]))
         if not group.active:
             # A group emptied by a withdrawal is active again. Scores of its old version no longer apply.
             group.active, group.version = True, group.version + 1
@@ -88,8 +89,8 @@ def reconcile(state: InvestigationState, items: list[EvidenceItem],
 def _current(state: InvestigationState, group_id: str) -> str:
     """The group that holds the members of `group_id` now, after any merges."""
     groups = {g.id: g for g in state.groups}
-    while groups[group_id].merged_into:
-        group_id = groups[group_id].merged_into
+    while (target := groups[group_id].merged_into) is not None:
+        group_id = target
     return group_id
 
 

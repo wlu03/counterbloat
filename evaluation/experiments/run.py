@@ -127,7 +127,7 @@ def verify(row: dict, llm_factory: Callable, searchable: dict[str, list[dict]],
         findings = store.find("findings", Finding, analysis_id="run")
         states = store.find("states", InvestigationState, analysis_id="run")
         status = findings[0].evidence_status if findings else "no_claim_extracted"
-        failed = store.get("analyses", "run")["status"] == "failed" or (
+        failed = (store.get("analyses", "run") or {}).get("status") == "failed" or (
             not findings and manifest.errors) or any(
             s.stop_reason == "provider_error" for s in states)
         if failed:

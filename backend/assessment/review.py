@@ -44,7 +44,7 @@ def numbers_supported(text: str, state: InvestigationState, spans: dict[str, Sou
         allowed |= _numbers(spans[item.span_id].text) if item.span_id in spans else set()
     outputs = [abs(v) for c in state.calculations for v in c.outputs.values()]
     # A rewrite may state a calculated result rounded to the precision it is written with.
-    return all(n in allowed or any(abs(v - n) * 2 <= Decimal(1).scaleb(n.as_tuple().exponent)
+    return all(n in allowed or any(abs(v - n) * 2 <= Decimal(1).scaleb(int(n.as_tuple().exponent))
                                    for v in outputs) for n in _numbers(text))
 
 
