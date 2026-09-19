@@ -1,0 +1,53 @@
+{
+  "kit_version": "1.1.0",
+  "dataset": "asa",
+  "mode": "retrospective",
+  "prepared_at": "2026-09-19T22:02:04.263394+00:00",
+  "count": 30,
+  "source_archive_sha256": "95119566d269a3194bff913fda98cb65f9a461a9e53dcf99ee0d0b871d8f3157",
+  "source_version": "0.1.0",
+  "source_assertion_count": 30,
+  "source_ruling_count": 24,
+  "source_company_group_count": 23,
+  "draft_material_counts": {
+    "present": 20,
+    "undetermined": 3,
+    "absent": 7
+  },
+  "draft_evidence_status_counts": {
+    "mixed": 19,
+    "insufficient": 3,
+    "supported": 7,
+    "contradicted": 1
+  },
+  "source_dataset_bytes_bundled": true,
+  "independent_ready_count": 0,
+  "adjudicated_reference_count": 0,
+  "corpus_status": "RETROSPECTIVE_ANSWER_BEARING_SUMMARY",
+  "inference_was_run": false,
+  "prepared_file_sha256": {
+    "runtime/corpus/passages.jsonl": "e4f9c608c83020f07d1ae0ea064fed89b13679ddb7d68d846df01fdcb8d9e55a",
+    "runtime/inputs.jsonl": "918b264500db77edaf5532ce447c04932aa158c8141f19ce646667726b2576cb",
+    "runtime/metadata.json": "d712ded0b36a564675d3521601ec6c4b988a8b298e1abdd11eaefe46ee6d0206",
+    "evaluator_only/UPSTREAM_README.md": "dd4ebb8ec704b1eed90de23ca70039d75dfb411bc4bcc8af827dcb20a143a79b",
+    "evaluator_only/id_mapping.jsonl": "c6f74e382e8b69f30c50c709fec3e35da9346ee782676b276b41be612fbeb1a1",
+    "evaluator_only/native_references.json": "2de028f2572d38df00241a3959a68319fd6d4a6d47fb228d55d4404fa9fa9a31",
+    "evaluator_only/references.jsonl": "c0dbc205e6c3cf7e69edadff985330529cb59194cbc693877eb629bcbb5f1caf",
+    "evaluator_only/upstream_manifest.json": "aa89a5b8d885d22fb38b9f2ec32441b8db52a0bca38263c92856edad8daebf97"
+  },
+  "split": "diagnostic_no_train_dev_test_split",
+  "label_mapping": {
+    "material": {
+      "Present": "present",
+      "Absent": "absent",
+      "Undetermined": "undetermined"
+    },
+    "evidence": {
+      "Supported": "supported",
+      "Contradicted": "contradicted",
+      "Mixed": "mixed",
+      "Insufficient": "insufficient",
+      "Not yet resolvable": "not_yet_resolvable"
+    }
+  }
+}

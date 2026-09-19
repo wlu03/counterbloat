@@ -1,0 +1,53 @@
+test_averitec_leakage_allowlist (test_kit.AdapterTests.test_averitec_leakage_allowlist) ... ok
+test_deep_copy (test_kit.AdapterTests.test_deep_copy) ... ok
+test_duplicate_ids_rejected (test_kit.AdapterTests.test_duplicate_ids_rejected) ... ok
+test_expected_count_fail (test_kit.AdapterTests.test_expected_count_fail) ... ok
+test_finance_leakage_allowlist (test_kit.AdapterTests.test_finance_leakage_allowlist) ... ok
+test_finance_oracle_doc_fallback (test_kit.AdapterTests.test_finance_oracle_doc_fallback) ... ok
+test_finqa_leakage_allowlist (test_kit.AdapterTests.test_finqa_leakage_allowlist) ... ok
+test_label_spelling_alias (test_kit.AdapterTests.test_label_spelling_alias) ... ok
+test_oracle_label_not_exposed (test_kit.AdapterTests.test_oracle_label_not_exposed) ... ok
+test_prepared_references_separate (test_kit.AdapterTests.test_prepared_references_separate) ... ok
+test_table_format_independent_of_gold (test_kit.AdapterTests.test_table_format_independent_of_gold) ... ok
+test_template_not_real_prediction (test_kit.AdapterTests.test_template_not_real_prediction) ... ok
+test_unknown_label_rejected (test_kit.AdapterTests.test_unknown_label_rejected) ... ok
+test_export_cannot_include_itself (test_kit.ExportBoundaryTests.test_export_cannot_include_itself) ... ok
+test_export_requires_prepared_inputs (test_kit.ExportBoundaryTests.test_export_requires_prepared_inputs) ... ok
+test_cached_download_hash_verified (test_kit.IOTests.test_cached_download_hash_verified) ... ok
+test_download_bad_hash_not_success (test_kit.IOTests.test_download_bad_hash_not_success) ... ok
+test_download_mock_and_hash (test_kit.IOTests.test_download_mock_and_hash) ... ok
+test_export_runtime_excludes_gold (test_kit.IOTests.test_export_runtime_excludes_gold) ... ok
+test_json_only_archive (test_kit.IOTests.test_json_only_archive) ... ok
+test_jsonl_round_trip (test_kit.IOTests.test_jsonl_round_trip) ... ok
+test_zip_path_traversal (test_kit.IOTests.test_zip_path_traversal) ... ok
+test_zip_size_limit (test_kit.IOTests.test_zip_size_limit) ... ok
+test_averitec_insufficient_to_refuted (test_kit.ScoreTests.test_averitec_insufficient_to_refuted) ... ok
+test_averitec_invalid_label (test_kit.ScoreTests.test_averitec_invalid_label) ... ok
+test_averitec_missing_counts_wrong (test_kit.ScoreTests.test_averitec_missing_counts_wrong) ... ok
+test_averitec_probability_bad_sum (test_kit.ScoreTests.test_averitec_probability_bad_sum) ... ok
+test_averitec_probability_perfect (test_kit.ScoreTests.test_averitec_probability_perfect) ... ok
+test_duplicate_predictions_rejected (test_kit.ScoreTests.test_duplicate_predictions_rejected) ... ok
+test_empty_program_rejected (test_kit.ScoreTests.test_empty_program_rejected) ... ok
+test_empty_selection_rejected (test_kit.ScoreTests.test_empty_selection_rejected) ... ok
+test_finance_exact_not_claimed_semantic (test_kit.ScoreTests.test_finance_exact_not_claimed_semantic) ... ok
+test_finance_human_review (test_kit.ScoreTests.test_finance_human_review) ... ok
+test_finance_missing_cannot_pass_review (test_kit.ScoreTests.test_finance_missing_cannot_pass_review) ... ok
+test_finance_reject_one_based_marker_string (test_kit.ScoreTests.test_finance_reject_one_based_marker_string) ... ok
+test_finqa_answer_mode_missing_denominator (test_kit.ScoreTests.test_finqa_answer_mode_missing_denominator) ... ok
+test_numeric_no_bool (test_kit.ScoreTests.test_numeric_no_bool) ... ok
+test_numeric_no_nonfinite (test_kit.ScoreTests.test_numeric_no_nonfinite) ... ok
+test_numeric_no_prose_parsing (test_kit.ScoreTests.test_numeric_no_prose_parsing) ... ok
+test_numeric_percent_scale (test_kit.ScoreTests.test_numeric_percent_scale) ... ok
+test_numeric_preserves_sign (test_kit.ScoreTests.test_numeric_preserves_sign) ... ok
+test_numeric_rounded (test_kit.ScoreTests.test_numeric_rounded) ... ok
+test_program_injection_rejected (test_kit.ScoreTests.test_program_injection_rejected) ... ok
+test_program_no_forward_reference (test_kit.ScoreTests.test_program_no_forward_reference) ... ok
+test_table_program_none (test_kit.ScoreTests.test_table_program_none) ... ok
+test_unknown_predictions_rejected (test_kit.ScoreTests.test_unknown_predictions_rejected) ... ok
+test_valid_program (test_kit.ScoreTests.test_valid_program) ... ok
+
+----------------------------------------------------------------------
+Ran 47 tests in 0.012s
+
+OK
+Exported runtime only to /tmp/tmp38qhu_2x/export.zip; references, oracle material, and raw answer keys excluded.

@@ -1,0 +1,15 @@
+{
+  "dataset": "asa",
+  "mode": "independent",
+  "count": 30,
+  "task": "corporate_claim_assessment",
+  "evidence_setting": "CLAIM_ONLY_NOT_READY_FOR_INDEPENDENT_EVALUATION",
+  "evidence_documents": 0,
+  "answer_bearing_evidence": false,
+  "explicit_reference_labels_in_runtime": false,
+  "independent_scoring_ready": false,
+  "reference_status": "unreviewed_compiler_drafts",
+  "source_reconstruction": "Short excerpts and context paraphrases, not full original advertisements",
+  "warning": "Claim-ingestion candidates only: no independent evidence or adjudication.",
+  "isolation_note": "Mount only this mode's runtime directory; Python adapters are not sandboxed."
+}

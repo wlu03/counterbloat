@@ -1,0 +1,180 @@
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py select --dataset finqa --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa --count 1 --output /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa.ids.json
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py template --dataset finqa --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa --ids /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa.ids.json --output /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa.template.jsonl
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py run --dataset finqa --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa --ids /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa.ids.json --adapter example_adapter:predict --output /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa.predictions.jsonl
+[1/1] SYNTHETIC/2020/page_1.pdf-0: abstained
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py score --dataset finqa --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa --ids /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa.ids.json --predictions /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa.predictions.jsonl --output /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa.metrics.json --answer-only
+{
+  "metric": "answer_only_numeric_diagnostic_NOT_official_execution",
+  "n": 1,
+  "correct": 0,
+  "accuracy": 0.0,
+  "completed": 0,
+  "coverage": 0.0,
+  "valid_outputs": 0,
+  "program_equivalence_accuracy": null,
+  "source_input_correctness": "Not automatically graded; requires source-linked review",
+  "dataset": "finqa",
+  "scored_at": "2026-09-19T21:49:20.602779+00:00",
+  "prediction_file_sha256": "98846f4fc6dd2e291661bc18b2919c9e09d9baf47fe04a7954962b4d66e011a5",
+  "declared_selection": [
+    "SYNTHETIC/2020/page_1.pdf-0"
+  ],
+  "note": "Local benchmark measurements, not corporate-overstatement accuracy."
+}
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py export-runtime --dataset finqa --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa --output /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa.runtime.zip
+Exported runtime only to /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa.runtime.zip; references, oracle material, and raw answer keys excluded.
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py run --dataset finqa --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa --adapter example_adapter:predict --output /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa.predictions.jsonl
+ERROR: Refusing to overwrite predictions: /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa.predictions.jsonl
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py official-export --dataset finqa --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa --predictions /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa.predictions.jsonl --output /tmp/counterbloat-synthetic-smoke-ztyu827s/finqa.official
+python "/tmp/counterbloat-synthetic-smoke-ztyu827s/finqa/evaluator_only/upstream/finqa_official.py" "/tmp/counterbloat-synthetic-smoke-ztyu827s/finqa.official/predictions.json" "/tmp/counterbloat-synthetic-smoke-ztyu827s/finqa.official/references.json"
+Export preserves the declared denominator. Empty AVeriTeC evidence uses an empty placeholder for scorer compatibility.
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py select --dataset financebench --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench --count 1 --output /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench.ids.json
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py template --dataset financebench --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench --ids /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench.ids.json --output /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench.template.jsonl
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py run --dataset financebench --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench --ids /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench.ids.json --adapter example_adapter:predict --output /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench.predictions.jsonl
+[1/1] SYNTHETIC_FB_1: abstained
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py score --dataset financebench --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench --ids /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench.ids.json --predictions /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench.predictions.jsonl --output /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench.metrics.json
+{
+  "metric": "financial_QA_diagnostics_plus_human_review",
+  "n": 1,
+  "completed": 0,
+  "coverage": 0.0,
+  "normalized_exact_match_DIAGNOSTIC_ONLY": 0.0,
+  "mean_annotated_citation_page_recall": 0.0,
+  "all_annotated_pages_cited_rate": 0.0,
+  "citation_entailment_automatically_established": false,
+  "human_reviewed": 0,
+  "human_review_coverage": 0.0,
+  "human_answer_accuracy_on_reviewed": null,
+  "human_evidence_backed_accuracy_on_reviewed": null,
+  "human_answer_accuracy_full_set": null,
+  "dataset": "financebench",
+  "scored_at": "2026-09-19T21:49:24.748592+00:00",
+  "prediction_file_sha256": "e33df9e66329f7343e88aa8ae28f816aac81fa071b660330b06d280d8a37ffff",
+  "declared_selection": [
+    "SYNTHETIC_FB_1"
+  ],
+  "note": "Local benchmark measurements, not corporate-overstatement accuracy."
+}
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py export-runtime --dataset financebench --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench --output /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench.runtime.zip
+Exported runtime only to /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench.runtime.zip; references, oracle material, and raw answer keys excluded.
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py run --dataset financebench --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench --adapter example_adapter:predict --output /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench.predictions.jsonl
+ERROR: Refusing to overwrite predictions: /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench.predictions.jsonl
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py review-sheet --dataset financebench --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench --predictions /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench.predictions.jsonl --output /tmp/counterbloat-synthetic-smoke-ztyu827s/review.csv
+Wrote 1 review rows to /tmp/counterbloat-synthetic-smoke-ztyu827s/review.csv. This file contains references: do not expose it to the model.
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py oracle --dataset financebench --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench --acknowledge-oracle --output /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench.oracle.jsonl
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py oracle --dataset financebench --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench --acknowledge-oracle --output /tmp/counterbloat-synthetic-smoke-ztyu827s/financebench/runtime/unsafe.jsonl
+ERROR: Oracle output must be outside runtime/
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py select --dataset averitec --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec --count 1 --output /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec.ids.json
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py template --dataset averitec --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec --ids /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec.ids.json --output /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec.template.jsonl
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py run --dataset averitec --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec --ids /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec.ids.json --adapter example_adapter:predict --output /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec.predictions.jsonl
+[1/1] averitec-dev-0000: abstained
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py score --dataset averitec --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec --ids /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec.ids.json --predictions /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec.predictions.jsonl --output /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec.metrics.json
+{
+  "accuracy": 0.0,
+  "macro_f1": 0.0,
+  "per_class": {
+    "Supported": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "support": 1
+    },
+    "Refuted": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "support": 0
+    },
+    "Not Enough Evidence": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "support": 0
+    },
+    "Conflicting Evidence/Cherrypicking": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "support": 0
+    }
+  },
+  "confusion": {
+    "Supported": {
+      "Supported": 0,
+      "Refuted": 0,
+      "Not Enough Evidence": 0,
+      "Conflicting Evidence/Cherrypicking": 0,
+      "__MISSING__": 1
+    },
+    "Refuted": {
+      "Supported": 0,
+      "Refuted": 0,
+      "Not Enough Evidence": 0,
+      "Conflicting Evidence/Cherrypicking": 0,
+      "__MISSING__": 0
+    },
+    "Not Enough Evidence": {
+      "Supported": 0,
+      "Refuted": 0,
+      "Not Enough Evidence": 0,
+      "Conflicting Evidence/Cherrypicking": 0,
+      "__MISSING__": 0
+    },
+    "Conflicting Evidence/Cherrypicking": {
+      "Supported": 0,
+      "Refuted": 0,
+      "Not Enough Evidence": 0,
+      "Conflicting Evidence/Cherrypicking": 0,
+      "__MISSING__": 0
+    }
+  },
+  "n": 1,
+  "metric": "native_verdict_only_NOT_evidence_conditioned_AVeriTeC_score",
+  "prediction_coverage": 0.0,
+  "probability_examples": 0,
+  "probability_coverage": 0.0,
+  "multiclass_brier": null,
+  "log_loss_clipped_1e_15": null,
+  "insufficient_to_refuted_rate": null,
+  "dataset": "averitec",
+  "scored_at": "2026-09-19T21:49:29.996703+00:00",
+  "prediction_file_sha256": "9559ec1ff7e135894c27ef03d3f604cad4d96dcb10a3efc484f3f1aae9c27356",
+  "declared_selection": [
+    "averitec-dev-0000"
+  ],
+  "note": "Local benchmark measurements, not corporate-overstatement accuracy."
+}
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py export-runtime --dataset averitec --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec --output /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec.runtime.zip
+Exported runtime only to /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec.runtime.zip; references, oracle material, and raw answer keys excluded.
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py run --dataset averitec --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec --adapter example_adapter:predict --output /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec.predictions.jsonl
+ERROR: Refusing to overwrite predictions: /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec.predictions.jsonl
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py official-export --dataset averitec --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec --predictions /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec.predictions.jsonl --output /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec.official
+python "/tmp/counterbloat-synthetic-smoke-ztyu827s/averitec/evaluator_only/upstream/averitec_official.py" --prediction_file "/tmp/counterbloat-synthetic-smoke-ztyu827s/averitec.official/predictions.json" --label_file "/tmp/counterbloat-synthetic-smoke-ztyu827s/averitec.official/references.json"
+Export preserves the declared denominator. Empty AVeriTeC evidence uses an empty placeholder for scorer compatibility.
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py oracle --dataset averitec --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec --acknowledge-oracle --output /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec.oracle.jsonl
+
+$ /opt/pyvenv/bin/python /mnt/data/counterbloat_eval_build/kit/benchmark.py oracle --dataset averitec --data-dir /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec --acknowledge-oracle --output /tmp/counterbloat-synthetic-smoke-ztyu827s/averitec/runtime/unsafe.jsonl
+ERROR: Oracle output must be outside runtime/

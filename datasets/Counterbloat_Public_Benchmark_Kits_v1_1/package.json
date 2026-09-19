@@ -1,0 +1,19 @@
+{
+  "name": "Counterbloat_Public_Benchmark_Kits_v1_1",
+  "version": "1.1.0",
+  "default_dataset": null,
+  "dataset_bytes_bundled": {
+    "asa": true,
+    "finqa": false,
+    "financebench": false,
+    "averitec": false
+  },
+  "prepared_on": "2026-09-19",
+  "purpose": "Unified benchmark preparation and evaluation with bundled ASA retrospective draft/candidate packets",
+  "supported_datasets": [
+    "finqa",
+    "financebench",
+    "averitec",
+    "asa"
+  ]
+}

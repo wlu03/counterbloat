@@ -1,0 +1,39 @@
+{
+  "dataset_name": "ASA assertion-level starter pack",
+  "version": "0.1.0",
+  "compiled_on": "2026-09-19",
+  "ruling_count": 24,
+  "assertion_count": 30,
+  "observed_date_range": "2017–2026",
+  "ruling_date_range": "2018–2026",
+  "collection_scope": "Purposive starter selection, including historical examples; not an exhaustive or randomly sampled archive.",
+  "previously_reported_search_pool_count": 198,
+  "search_pool_is_not_pack_count": true,
+  "search_pool_url": "https://www.asa.org.uk/codes-and-rulings/rulings.html?date_period=past_year&issue=B62E671E-81D6-42FD-8BDA1611D194B1D3",
+  "draft_material_counts": {
+    "Present": 20,
+    "Undetermined": 3,
+    "Absent": 7
+  },
+  "reviewed_reference_count": 0,
+  "independent_ready_count": 0,
+  "original_ad_capture_count": 0,
+  "admitted_independent_document_count": 0,
+  "underlying_evidence_lead_count": 2,
+  "provisional_labels": "Compiler interpretations of published ASA records; not ASA labels and not adjudicated gold.",
+  "full_198_archive_compiled": false,
+  "model_evaluation_performed": false,
+  "supported_uses": [
+    "retrospective summary interpretation smoke tests",
+    "claim ingestion and output-schema integration",
+    "human review and evidence collection"
+  ],
+  "unsupported_claims": [
+    "independent detection performance",
+    "population prevalence",
+    "full archive coverage",
+    "two-reviewer agreement",
+    "clinical conclusions"
+  ],
+  "rights_note": "Short claim excerpts and original compiler paraphrases only. ASA is the source, not the author or endorser of this pack. No redistribution rights to original ads, rulings or underlying evidence are asserted."
+}

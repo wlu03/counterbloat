@@ -1,0 +1,487 @@
+{
+  "kind": "CLI_SOFTWARE_VALIDATION_NOT_MODEL_EVALUATION",
+  "check_count": 30,
+  "checks_passed": 30,
+  "live_network_calls": 0,
+  "model_calls": 0,
+  "recorded_examples_are_test_fixtures": true,
+  "checks": [
+    {
+      "name": "retrospective validation",
+      "args": [
+        "validate",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "independent candidate validation",
+      "args": [
+        "validate",
+        "--dataset",
+        "asa",
+        "--mode",
+        "independent"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "mode is mandatory",
+      "args": [
+        "validate",
+        "--dataset",
+        "asa"
+      ],
+      "expected_exit": 2,
+      "actual_exit": 2,
+      "passed": true
+    },
+    {
+      "name": "old datasets do not accept ASA flags",
+      "args": [
+        "validate",
+        "--dataset",
+        "finqa",
+        "--mode",
+        "retrospective"
+      ],
+      "expected_exit": 2,
+      "actual_exit": 2,
+      "passed": true
+    },
+    {
+      "name": "prepare is idempotent",
+      "args": [
+        "prepare",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--accept-license"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "local preparation with archive",
+      "args": [
+        "prepare",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--input-file",
+        "/mnt/data/asa_integration_work/Counterbloat_Public_Benchmark_Kits_v1_1/bundled/ASA_test_pack_2026-09-19.zip",
+        "--data-dir",
+        "/tmp/asa_cli_validation_d1hg4xxj/fresh",
+        "--accept-license"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "mode root mismatch rejected",
+      "args": [
+        "validate",
+        "--dataset",
+        "asa",
+        "--mode",
+        "independent",
+        "--data-dir",
+        "/mnt/data/asa_integration_work/Counterbloat_Public_Benchmark_Kits_v1_1/data/asa/retrospective"
+      ],
+      "expected_exit": 1,
+      "actual_exit": 1,
+      "passed": true
+    },
+    {
+      "name": "template",
+      "args": [
+        "template",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/template.jsonl"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "default draft scoring refused",
+      "args": [
+        "score",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--predictions",
+        "/tmp/asa_cli_validation_d1hg4xxj/template.jsonl",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/forbidden.metrics.json"
+      ],
+      "expected_exit": 1,
+      "actual_exit": 1,
+      "passed": true
+    },
+    {
+      "name": "pending scores have zero coverage",
+      "args": [
+        "score",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--allow-draft",
+        "--predictions",
+        "/tmp/asa_cli_validation_d1hg4xxj/template.jsonl",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/pending.metrics.json"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "native null template import",
+      "args": [
+        "import-predictions",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--predictions",
+        "/tmp/asa_cli_validation_d1hg4xxj/template.jsonl",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/imported.pending.jsonl"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "independent inference blocked",
+      "args": [
+        "run",
+        "--dataset",
+        "asa",
+        "--mode",
+        "independent",
+        "--adapter",
+        "example_adapter:predict",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/independent.pred.jsonl"
+      ],
+      "expected_exit": 1,
+      "actual_exit": 1,
+      "passed": true
+    },
+    {
+      "name": "independent scoring blocked",
+      "args": [
+        "score",
+        "--dataset",
+        "asa",
+        "--mode",
+        "independent",
+        "--predictions",
+        "/tmp/asa_cli_validation_d1hg4xxj/template.jsonl",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/independent.metrics.json"
+      ],
+      "expected_exit": 1,
+      "actual_exit": 1,
+      "passed": true
+    },
+    {
+      "name": "retrospective request builder and abstaining adapter",
+      "args": [
+        "run",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--adapter",
+        "example_asa_adapter:predict",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/abstentions.jsonl"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "score abstentions",
+      "args": [
+        "score",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--allow-draft",
+        "--predictions",
+        "/tmp/asa_cli_validation_d1hg4xxj/abstentions.jsonl",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/abstentions.metrics.json"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "review sheet",
+      "args": [
+        "review-sheet",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--predictions",
+        "/tmp/asa_cli_validation_d1hg4xxj/abstentions.jsonl",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/review.csv"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "retrospective runtime export",
+      "args": [
+        "export-runtime",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/retro.zip"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "independent candidate export",
+      "args": [
+        "export-runtime",
+        "--dataset",
+        "asa",
+        "--mode",
+        "independent",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/ind.zip"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "no official ASA benchmark export",
+      "args": [
+        "official-export",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--predictions",
+        "/tmp/asa_cli_validation_d1hg4xxj/template.jsonl",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/invalid_export"
+      ],
+      "expected_exit": 1,
+      "actual_exit": 1,
+      "passed": true
+    },
+    {
+      "name": "no synthetic ASA corpus downloader",
+      "args": [
+        "corpus",
+        "--dataset",
+        "asa",
+        "--mode",
+        "independent"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "declared pilot selection",
+      "args": [
+        "select",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--count",
+        "5",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/pilot.ids.json"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "pilot adapter",
+      "args": [
+        "run",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--ids",
+        "/tmp/asa_cli_validation_d1hg4xxj/pilot.ids.json",
+        "--adapter",
+        "example_asa_adapter:predict",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/pilot.pred.jsonl"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "pilot scoring denominator",
+      "args": [
+        "score",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--allow-draft",
+        "--ids",
+        "/tmp/asa_cli_validation_d1hg4xxj/pilot.ids.json",
+        "--predictions",
+        "/tmp/asa_cli_validation_d1hg4xxj/pilot.pred.jsonl",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/pilot.metrics.json"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "draft identity fixture scorer",
+      "args": [
+        "score",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--allow-draft",
+        "--predictions",
+        "/tmp/asa_cli_validation_d1hg4xxj/identity.jsonl",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/identity.metrics.json"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "native roundtrip export",
+      "args": [
+        "native-export",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--predictions",
+        "/tmp/asa_cli_validation_d1hg4xxj/identity.jsonl",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/native"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "native roundtrip import",
+      "args": [
+        "import-predictions",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--predictions",
+        "/tmp/asa_cli_validation_d1hg4xxj/native/predictions.jsonl",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/roundtrip.jsonl"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "roundtrip scoring",
+      "args": [
+        "score",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--allow-draft",
+        "--predictions",
+        "/tmp/asa_cli_validation_d1hg4xxj/roundtrip.jsonl",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/roundtrip.metrics.json"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true
+    },
+    {
+      "name": "native export refuses missing records",
+      "args": [
+        "native-export",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--predictions",
+        "/tmp/asa_cli_validation_d1hg4xxj/abstentions.jsonl",
+        "--output",
+        "/tmp/asa_cli_validation_d1hg4xxj/badnative"
+      ],
+      "expected_exit": 1,
+      "actual_exit": 1,
+      "passed": true
+    },
+    {
+      "name": "runtime cannot be overwritten by review output",
+      "args": [
+        "review-sheet",
+        "--dataset",
+        "asa",
+        "--mode",
+        "retrospective",
+        "--predictions",
+        "/tmp/asa_cli_validation_d1hg4xxj/template.jsonl",
+        "--output",
+        "/mnt/data/asa_integration_work/Counterbloat_Public_Benchmark_Kits_v1_1/data/asa/retrospective/runtime/answers.csv"
+      ],
+      "expected_exit": 1,
+      "actual_exit": 1,
+      "passed": true
+    },
+    {
+      "name": "original ASA scorer agreement on explicit identity fixture",
+      "passed": true,
+      "actual_exit": 0,
+      "expected_exit": 0,
+      "note": "Mapping test only; not model performance."
+    }
+  ]
+}

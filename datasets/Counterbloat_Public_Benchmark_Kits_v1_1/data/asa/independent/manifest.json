@@ -1,0 +1,53 @@
+{
+  "kit_version": "1.1.0",
+  "dataset": "asa",
+  "mode": "independent",
+  "prepared_at": "2026-09-19T22:02:04.948001+00:00",
+  "count": 30,
+  "source_archive_sha256": "95119566d269a3194bff913fda98cb65f9a461a9e53dcf99ee0d0b871d8f3157",
+  "source_version": "0.1.0",
+  "source_assertion_count": 30,
+  "source_ruling_count": 24,
+  "source_company_group_count": 23,
+  "draft_material_counts": {
+    "present": 20,
+    "undetermined": 3,
+    "absent": 7
+  },
+  "draft_evidence_status_counts": {
+    "mixed": 19,
+    "insufficient": 3,
+    "supported": 7,
+    "contradicted": 1
+  },
+  "source_dataset_bytes_bundled": true,
+  "independent_ready_count": 0,
+  "adjudicated_reference_count": 0,
+  "corpus_status": "CLAIM_ONLY_NOT_READY_FOR_INDEPENDENT_EVALUATION",
+  "inference_was_run": false,
+  "prepared_file_sha256": {
+    "runtime/corpus/passages.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "runtime/inputs.jsonl": "c3812bc6bb961f50887f0f5e76793ebfc4dc117b89386fe93024fed13c859623",
+    "runtime/metadata.json": "157463d350c8ecac3f2137b6b365ca1a128df13f6e436816a8b1e6ea14a3ace5",
+    "evaluator_only/UPSTREAM_README.md": "dd4ebb8ec704b1eed90de23ca70039d75dfb411bc4bcc8af827dcb20a143a79b",
+    "evaluator_only/id_mapping.jsonl": "c6f74e382e8b69f30c50c709fec3e35da9346ee782676b276b41be612fbeb1a1",
+    "evaluator_only/native_references.json": "2de028f2572d38df00241a3959a68319fd6d4a6d47fb228d55d4404fa9fa9a31",
+    "evaluator_only/references.jsonl": "874f91faff7352cd0c4480deb6825dd41bd945ef91c8b7c87486194d6bc2c3ad",
+    "evaluator_only/upstream_manifest.json": "aa89a5b8d885d22fb38b9f2ec32441b8db52a0bca38263c92856edad8daebf97"
+  },
+  "split": "diagnostic_no_train_dev_test_split",
+  "label_mapping": {
+    "material": {
+      "Present": "present",
+      "Absent": "absent",
+      "Undetermined": "undetermined"
+    },
+    "evidence": {
+      "Supported": "supported",
+      "Contradicted": "contradicted",
+      "Mixed": "mixed",
+      "Insufficient": "insufficient",
+      "Not yet resolvable": "not_yet_resolvable"
+    }
+  }
+}

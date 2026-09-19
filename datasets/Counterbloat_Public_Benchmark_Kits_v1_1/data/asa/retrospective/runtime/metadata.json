@@ -1,0 +1,15 @@
+{
+  "dataset": "asa",
+  "mode": "retrospective",
+  "count": 30,
+  "task": "corporate_claim_assessment",
+  "evidence_setting": "RETROSPECTIVE_ANSWER_BEARING_SUMMARY",
+  "evidence_documents": 30,
+  "answer_bearing_evidence": true,
+  "explicit_reference_labels_in_runtime": false,
+  "independent_scoring_ready": false,
+  "reference_status": "unreviewed_compiler_drafts",
+  "source_reconstruction": "Short excerpts and context paraphrases, not full original advertisements",
+  "warning": "Retrospective inputs deliberately include answer-bearing summaries; not independent detection.",
+  "isolation_note": "Mount only this mode's runtime directory; Python adapters are not sandboxed."
+}

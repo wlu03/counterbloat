@@ -1,0 +1,58 @@
+{
+  "suite_version": "1.1.0",
+  "generated_on": "2026-09-19",
+  "common_interface": "predict(example: dict, runtime_dir: Path) -> dict",
+  "aggregate_accuracy_supported": false,
+  "no_model_evaluation_performed": true,
+  "datasets": [
+    {
+      "dataset": "finqa",
+      "expected_source_count": 1147,
+      "bundled_example_count": 0,
+      "data_status": "existing_pinned_downloader",
+      "task": "financial_numeric_qa"
+    },
+    {
+      "dataset": "financebench",
+      "expected_source_count": 150,
+      "bundled_example_count": 0,
+      "data_status": "existing_pinned_downloader",
+      "task": "financial_report_qa"
+    },
+    {
+      "dataset": "averitec",
+      "expected_source_count": 500,
+      "bundled_example_count": 0,
+      "data_status": "existing_pinned_downloader",
+      "task": "claim_verification",
+      "split_note": "FEVER-7 development, local evaluation only"
+    },
+    {
+      "dataset": "asa",
+      "bundled_unique_example_count": 30,
+      "ruling_count": 24,
+      "company_group_count": 23,
+      "data_status": "user_upload_normalized_and_bundled",
+      "task": "corporate_claim_assessment",
+      "modes": {
+        "retrospective": {
+          "inputs": 30,
+          "corpus_passages": 30,
+          "scoring": "provisional_draft_opt_in"
+        },
+        "independent": {
+          "inputs": 30,
+          "corpus_passages": 0,
+          "scoring": "blocked"
+        }
+      },
+      "reviewed_references": 0,
+      "original_source_sha256": "95119566d269a3194bff913fda98cb65f9a461a9e53dcf99ee0d0b871d8f3157"
+    }
+  ],
+  "checks": {
+    "shared_unit_tests_passed": 95,
+    "cli_checks_passed": 30,
+    "original_asa_scorer_tests_passed": 10
+  }
+}
