@@ -142,3 +142,51 @@ def test_withdrawing_the_cited_passage_removes_the_calculation_even_if_a_repetit
     state = build()
     withdraw(state, "e1", "corrected")
     assert state.calculations == [] and state.groups[0].active
+
+
+def test_identical_text_is_one_group_in_every_order_of_arrival():
+    import itertools
+
+    def items():
+        return {"O": _item(0, "s1", "Emissions per unit fell 40%."),
+                "R": _item(1, "s2", "The firm says intensity dropped two fifths"),
+                "R2": _item(2, "s3", "The firm says intensity dropped two fifths")}
+
+    for order in itertools.permutations(["O", "R", "R2"]):
+        state = _state()
+        for name in order:                       # one item per round; only R is declared
+            reconcile(state, [items()[name]], {"s2": "s1"})
+        active = [g for g in state.groups if g.active]
+        assert len(active) == 1 and sorted(active[0].member_ids) == ["e0", "e1", "e2"], order
+    state = _state()
+    reconcile(state, list(items().values()), {"s2": "s1"})  # all in one round
+    assert len([g for g in state.groups if g.active]) == 1
+
+
+def test_merge_refuses_a_group_with_itself_or_an_inactive_group():
+    import pytest
+
+    from backend.evidence.provenance import merge
+
+    state = _state()
+    reconcile(state, [_item(1, "s1", "A."), _item(2, "s2", "B."), _item(3, "s3", "C.")], {})
+    a, b, c = (g.id for g in state.groups)
+    with pytest.raises(ValueError):
+        merge(state, a, a)
+    merge(state, a, b)
+    with pytest.raises(ValueError):
+        merge(state, b, c)
+    assert {e.group_id for e in state.evidence} == {a, c}
+
+
+def test_a_withdrawal_reopens_a_question_that_rested_on_the_item():
+    from backend.models import AnswerStatus, VerificationQuestion
+
+    state = _state()
+    reconcile(state, [_item(1, "s1", "A."), _item(2, "s2", "B.")], {})
+    state.questions = [VerificationQuestion(id="q", claim_id="c", text="?", status=AnswerStatus.answered,
+                                            answer="Yes.", evidence_ids=["e1", "e2"])]
+    withdraw(state, "e1")
+    assert state.questions[0].status == AnswerStatus.answered and state.questions[0].evidence_ids == ["e2"]
+    withdraw(state, "e2")
+    assert state.questions[0].status == AnswerStatus.open and state.questions[0].answer is None

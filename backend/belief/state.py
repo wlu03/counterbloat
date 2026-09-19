@@ -26,7 +26,9 @@ def apply_update(state: InvestigationState, update: StateUpdate, new_evidence_id
     previous = state.assessment.status
     status, mechanisms = update.status, update.mechanisms
     # Only evidence about the claim itself counts. Support for a side question does not.
-    backed = {e.relationship for e in state.evidence if e.comparable and e.target == "claim"}
+    inactive = {g.id for g in state.groups if not g.active}
+    backed = {e.relationship for e in state.evidence
+              if e.comparable and e.target == "claim" and e.group_id not in inactive}
     tested = {c.claim_relation for c in state.calculations}
     if (status == EvidenceStatus.supported
             and Relationship.supports not in backed and "agrees" not in tested) or (

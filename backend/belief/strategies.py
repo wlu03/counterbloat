@@ -156,8 +156,13 @@ def run(state: InvestigationState, new_evidence_ids: list[str], new_calculation_
     """Apply the configured strategy to a state that already holds the round's observations."""
     if settings.updater == "full_context":
         # One representative per provenance group, and no earlier verdict or score.
-        first = {e.group_id: e for e in reversed(active_evidence(state))}
-        evidence = [e for e in active_evidence(state) if first[e.group_id] is e]
+        # The member shown for a group is one about the claim on the same basis, if there is one,
+        # and an original before a repetition.
+        shown: dict[str | None, EvidenceItem] = {}
+        for e in sorted(active_evidence(state), key=lambda e: (
+                e.target != "claim", not e.comparable, e.repeats_span_id is not None)):
+            shown.setdefault(e.group_id, e)
+        evidence = [e for e in active_evidence(state) if shown[e.group_id] is e]
         result = llm.reassess(_target(state), state.claim, evidence, state.calculations,
                               state.questions)
         p = result.probability

@@ -69,8 +69,14 @@ def claim_relation(outputs: dict[str, Decimal], claim_output: str | None,
         return None, "none"
     # The precision comes from the claim's own wording, not from how the model wrote the value.
     tolerance = Decimal(1).scaleb(int(parse_number(written[0]).as_tuple().exponent)) / 2
-    agrees = abs(outputs[claim_output] - expected) <= tolerance
-    return expected, "agrees" if agrees else "disagrees"
+    result = outputs[claim_output]
+    if abs(result - expected) <= tolerance:
+        return expected, "agrees"
+    if abs(abs(result) - abs(expected)) <= tolerance:
+        # Same size, opposite sign: the model wrote a fall as a positive number or the reverse.
+        # The sign convention is not known, so the calculation does not test the claim.
+        return None, "none"
+    return expected, "disagrees"
 
 
 def execute(calc_id: str, claim_id: str, inputs: list[CalcInput], steps: list[CalcStep],

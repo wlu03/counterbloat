@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.models import Mode
 
@@ -28,8 +28,8 @@ class AssessmentSettings(BaseModel):
     updater: Literal["linguistic", "full_context", "evidence_accumulator"] = "linguistic"
     # Prior and tempering of the experimental accumulator. 0.5 is a neutral scenario prior. It
     # was not estimated from data.
-    prior: float = 0.5
-    tempering: float = 1.0
+    prior: float = Field(0.5, gt=0, lt=1)
+    tempering: float = Field(1.0, gt=0, le=1)
     public_numeric_probability: Literal[False] = False
     review_original_decisive_evidence: Literal[True] = True
 

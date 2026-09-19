@@ -70,3 +70,12 @@ def test_agreement_uses_the_precision_the_claim_is_written_with():
         assert claim_relation(outputs, "x", expected, text)[1] == "agrees"
     assert claim_relation(outputs, "x", "-40", "We reduced emissions by 40.0% in 2025.")[1] == "disagrees"
     assert claim_relation(outputs, "x", "-35", text) == (None, "none")  # 35 is not in the claim
+
+
+def test_an_opposite_sign_of_the_same_size_does_not_count_as_disagreement():
+    from backend.verification.numeric import claim_relation
+
+    text = "We reduced emissions by 40% in 2025."
+    assert claim_relation({"x": Decimal("-40")}, "x", "40", text) == (None, "none")
+    assert claim_relation({"x": Decimal("40")}, "x", "-40", text) == (None, "none")
+    assert claim_relation({"x": Decimal("20")}, "x", "-40", text)[1] == "disagrees"

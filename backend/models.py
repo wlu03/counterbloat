@@ -173,6 +173,7 @@ class EvidenceGroup(BaseModel):
     version: int = 1
     active: bool = True
     history: list[str] = []  # corrections, withdrawals, and merges, oldest first
+    merged_into: str | None = None  # set when a merge moved this group's members elsewhere
 
 
 class CalcInput(BaseModel):
