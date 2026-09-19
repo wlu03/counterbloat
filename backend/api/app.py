@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from typing import Literal
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException
-from pydantic import BaseModel
+from pydantic import AwareDatetime, BaseModel
 
 from backend.belief.priority import coverage
 from backend.config import env, load_settings
@@ -24,20 +24,22 @@ from backend.retrieval.memory import MemoryIndex
 class DocumentRequest(BaseModel):
     url: str | None = None
     content: str | None = None
-    media_type: str = "text/html"
-    published_at: datetime | None = None
+    media_type: Literal["text/html", "application/xhtml+xml", "text/plain",
+                        "application/pdf"] = "text/html"
+    # A date without a UTC offset cannot be compared with a cutoff, so it is refused.
+    published_at: AwareDatetime | None = None
 
 
 class AnalysisRequest(BaseModel):
     document_id: str
     mode: Mode | None = None
-    cutoff: datetime | None = None
+    cutoff: AwareDatetime | None = None
     selected_span_ids: list[str] = []
 
 
 class ReviewRequest(BaseModel):
     reviewer: str
-    decision: str
+    decision: Literal["accept", "reject"]
     note: str = ""
 
 
@@ -117,6 +119,8 @@ def create_app(deps: Deps | None = None) -> FastAPI:
         if idempotency_key:
             existing = d.store.find("analyses", idempotency_key=idempotency_key)
             if existing:
+                if existing[0]["document_id"] != request.document_id:
+                    raise HTTPException(409, "Idempotency-Key was used for another document")
                 return existing[0]
         job = {"id": f"an-{uuid.uuid4().hex[:12]}", "document_id": request.document_id,
                "mode": request.mode, "cutoff": request.cutoff.isoformat() if request.cutoff else None,
@@ -158,6 +162,7 @@ def create_app(deps: Deps | None = None) -> FastAPI:
 
     @app.get("/claims/{claim_id}/updates", dependencies=guard)
     def read_updates(claim_id: str, d: Deps = Depends(get_deps)):
+        found(d.store.get("claims", claim_id), "claim")
         return sorted(d.store.find("updates", claim_id=claim_id), key=lambda u: u["version"])
 
     @app.post("/findings/{finding_id}/review", dependencies=guard)
