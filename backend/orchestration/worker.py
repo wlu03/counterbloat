@@ -18,7 +18,7 @@ from backend.evidence.ledger import admissible
 from backend.evidence.provenance import lineage, reconcile
 from backend.models import (
     Calculation, CalcInput, Claim, DocumentSnapshot, EvidenceItem, InvestigationState, Mode,
-    Relationship, RunManifest, SourceSpan, VerificationQuestion,
+    Relationship, RunManifest, ScoringTarget, SourceSpan, VerificationQuestion,
 )
 from backend.planning import checklists
 from backend.planning.checklists import plan
@@ -40,6 +40,8 @@ class Deps:
     router: Router | None = None
     compressor: Compressor | None = None
     transcribe: Callable[[bytes], str] | None = None  # reads PDF pages that have no text layer
+    # What internal scores are scores of. An experiment on a labelled dataset declares its own.
+    target: Callable[[Claim, datetime | None], ScoringTarget] = strategies.new_target
 
 
 def current_commit() -> str | None:
@@ -126,7 +128,7 @@ def investigate(analysis_id: str, claim: Claim, deps: Deps, llm: LLM, manifest: 
                 mode: Mode, cutoff: datetime | None) -> tuple[InvestigationState, dict[str, SourceSpan]]:
     settings = deps.settings
     state = InvestigationState(claim=claim, questions=plan(claim, llm, manifest),
-                               target=strategies.new_target(claim, cutoff))
+                               target=deps.target(claim, cutoff))
     seen: dict[str, SourceSpan] = {}
     return _rounds(analysis_id, state, seen, settings.max_investigation_rounds, deps, llm,
                    manifest, mode, cutoff)
@@ -265,6 +267,7 @@ def run_analysis(analysis_id: str, deps: Deps) -> None:
                       claim_id=claim.id)
             store.put("findings", finding.finding_id, finding, analysis_id=analysis_id,
                       claim_id=claim.id)
+            manifest.embedding_search = getattr(deps.index, "used_embeddings", None)
             save("running", claims_done=done)
         # Operational errors mean some work did not run, so the result is labelled partial.
         save("complete", partial=bool(manifest.errors))

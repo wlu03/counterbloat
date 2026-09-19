@@ -335,6 +335,8 @@ class RunManifest(BaseModel):
     commit: str | None = None
     updater: str = "linguistic"
     embedding_search: bool | None = None  # False when search fell back to keywords only
+    skipped_by_router: int = 0  # passages the router excluded before claim extraction
+    compression_fallbacks: int = 0  # contexts sent uncompressed after a failed or lossy compression
     models: dict[str, str] = {}
     cutoff: datetime | None = None
     calls: list[ProviderCall] = []

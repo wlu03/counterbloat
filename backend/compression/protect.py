@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import re
+import time
 
-from backend.models import ProviderCall, RunManifest
+from backend.models import Mode, ProviderCall, RunManifest
 from backend.providers.base import Compressor, ProviderError
 
 MIN_BACKGROUND_CHARS = 1200
@@ -38,18 +39,21 @@ def build_context(decisive: list[str], background: list[str], compressor: Compre
         return raw, False
     safe = [_neutralize(d) for d in decisive]
     marked = "\n\n".join(f"<ttc_safe>{d}</ttc_safe>" for d in safe)
+    manifest = manifest or RunManifest(analysis_id="", mode=Mode.frozen, config_hash="")
+    started = time.monotonic()
     try:
         result = compressor.compress(marked + "\n\n" + _neutralize(background_text))
     except ProviderError as exc:
-        if manifest is not None:
-            manifest.errors.append(str(exc))
+        manifest.errors.append(str(exc))
+        manifest.compression_fallbacks += 1
         return raw, False
     output = re.sub(r"</?ttc_safe>", "", result.output)
-    if manifest is not None:
-        manifest.calls.append(ProviderCall(provider="ttc", purpose="compress",
-                                           input_tokens=result.input_tokens,
-                                           output_tokens=result.output_tokens,
-                                           billing_unit="removed_tokens"))
+    manifest.calls.append(ProviderCall(provider="ttc", purpose="compress",
+                                       input_tokens=result.input_tokens,
+                                       output_tokens=result.output_tokens,
+                                       billing_unit="removed_tokens",
+                                       latency_ms=int((time.monotonic() - started) * 1000)))
     if protected_retention(decisive, output) < 1.0 or output == raw:
+        manifest.compression_fallbacks += 1
         return raw, False
     return output, True

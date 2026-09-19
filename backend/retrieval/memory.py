@@ -12,6 +12,8 @@ def _tokens(text: str) -> set[str]:
 
 
 class MemoryIndex:
+    used_embeddings = False  # keyword overlap only
+
     def __init__(self) -> None:
         self.entries: dict[str, tuple[SourceSpan, DocumentSnapshot]] = {}
 

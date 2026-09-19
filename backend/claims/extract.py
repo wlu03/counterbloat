@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import re
+import time
 
-from backend.models import Claim, RunManifest, SourceSpan
+from backend.models import Claim, ProviderCall, RunManifest, SourceSpan
 from backend.providers.base import LLM, ClaimDraft, ProviderError, Router
 
 # Jev may exclude a passage only when it is this sure the passage makes no assertion.
@@ -33,11 +34,17 @@ def extract(spans: list[SourceSpan], llm: LLM, router: Router | None, manifest: 
         if span.kind not in CANDIDATE_KINDS:
             continue
         if router is not None and span.id not in selected:
+            started = time.monotonic()
+            call = ProviderCall(provider="jev", purpose="route", billing_unit="requests")
+            manifest.calls.append(call)
             try:
                 route = router.route(span.text)
+                call.latency_ms = int((time.monotonic() - started) * 1000)
                 if not route.is_claim and route.confidence >= EXCLUDE_CONFIDENCE:
+                    manifest.skipped_by_router += 1
                     continue
             except ProviderError as exc:
+                call.error = str(exc)
                 manifest.errors.append(str(exc))  # routing failed, so extract from the passage
         context = [by_id[i] for i in (span.prev_id, span.next_id, *span.note_ids) if i in by_id]
         try:

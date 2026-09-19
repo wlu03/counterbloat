@@ -18,6 +18,7 @@ class ElasticIndex:
         api_key = env("ELASTICSEARCH_API_KEY")
         self.client = Elasticsearch(env("ELASTICSEARCH_URL"), api_key=api_key)
         self.llm = llm
+        self.used_embeddings: bool | None = None  # whether the last search included vectors
         properties = {
             "document_id": {"type": "keyword"}, "kind": {"type": "keyword"},
             "text": {"type": "text"}, "admissible_from": {"type": "date"},
@@ -60,6 +61,7 @@ class ElasticIndex:
             "bool": {"must": {"match": {"text": query}}, "filter": filters}})
         rankings = [[hit["_id"] for hit in keyword["hits"]["hits"]]]
         vectors = self._embed([query])
+        self.used_embeddings = bool(vectors)
         if vectors:
             semantic = self.client.search(index=INDEX, size=size, knn={
                 "field": "embedding", "query_vector": vectors[0], "k": size,
