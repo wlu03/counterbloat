@@ -27,12 +27,17 @@ def value_in_source(value: Decimal, span: SourceSpan) -> bool:
     return any(parse_number(n) == value for n in numbers)
 
 
+def _words(unit: str) -> set[str]:
+    return {word.rstrip("s") for word in re.findall(r"[a-z0-9]+", unit.lower())}
+
+
 def _unit_product(a: str, b: str) -> str:
-    # "kg CO2e/unit" times "unit" is "kg CO2e". A rate times any other unit is rejected.
+    # "kg CO2e/unit" times "unit" or "units produced" is "kg CO2e": every word of the rate's
+    # denominator appears in the other unit. A rate times any other unit is rejected.
     for rate, other in ((a, b), (b, a)):
         if "/" in rate:
             numerator, denominator = rate.rsplit("/", 1)
-            if denominator.strip().lower().rstrip("s") == other.strip().lower().rstrip("s"):
+            if _words(denominator) and _words(denominator) <= _words(other):
                 return numerator.strip()
     if "/" in a or "/" in b:
         raise CalculationError(f"incompatible units in multiply: {a}, {b}")

@@ -73,6 +73,9 @@ def test_multiply_rejects_mixed_periods_and_unrelated_rates():
     with pytest.raises(CalculationError):
         execute("c", "claim", [value("a", "10", "kg CO2e/unit", "2024"),
                                value("b", "500", "employees", "2024")], step)
+    worded = execute("c", "claim", [value("a", "10", "kg CO2e/unit", "2024"),
+                                    value("b", "1000", "units produced", "2024")], step)
+    assert worded.outputs["x"] == Decimal(10000) and worded.units["x"] == "kg CO2e"
 
 
 def test_claim_value_must_be_a_number_in_the_quote():

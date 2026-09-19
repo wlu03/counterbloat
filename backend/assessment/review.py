@@ -77,9 +77,12 @@ def finalize(state: InvestigationState, spans: dict[str, SourceSpan], llm: LLM,
     except ProviderError as exc:
         finding.uncertainty.measurement_limitations = [f"review did not run: {exc}"]
         return finding
+    # Review reasons are model text, so they follow the same number rule as the summary.
+    reasons = [r for r in review.reasons if numbers_supported(r, state, spans)]
     if review.decision == "reject":
         finding.evidence_status, finding.mechanisms = EvidenceStatus.insufficient, []
-        finding.summary = "Review rejected the proposed conclusion: " + "; ".join(review.reasons)
+        finding.summary = "Review rejected the proposed conclusion."
+        finding.uncertainty.measurement_limitations = reasons
         return finding
     weaker = (EvidenceStatus.mixed, EvidenceStatus.insufficient, EvidenceStatus.not_yet_resolvable)
     if review.decision == "narrow" and review.narrowed_status in weaker:
@@ -90,7 +93,7 @@ def finalize(state: InvestigationState, spans: dict[str, SourceSpan], llm: LLM,
         finding.supported_rewrite = report.supported_rewrite
     finding.uncertainty.source_independence = report.source_independence
     finding.uncertainty.measurement_limitations = report.measurement_limitations + (
-        review.reasons if review.decision != "accept" else [])
+        reasons if review.decision != "accept" else [])
     finding.uncertainty.interpretation_ambiguity = report.interpretation_ambiguity
     if review.decision == "accept":
         finding.review_status = ReviewState.checks_passed
