@@ -37,7 +37,8 @@ class Store:
     def __init__(self, url: str = "sqlite:///countercheck.db") -> None:
         options = {}
         if url in ("sqlite://", "sqlite:///:memory:"):
-            # One shared connection keeps an in-memory database alive across calls.
+            # An in-memory SQLite database is deleted when its connection closes, so every call
+            # uses one connection.
             options = {"poolclass": StaticPool, "connect_args": {"check_same_thread": False}}
         self.engine = create_engine(url, **options)
         metadata.create_all(self.engine)

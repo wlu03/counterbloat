@@ -1,4 +1,7 @@
-"""Reciprocal rank fusion. It combines ranks and says nothing about truth."""
+"""Reciprocal rank fusion. The fused score depends only on ranks.
+
+It does not measure whether a passage is true.
+"""
 from __future__ import annotations
 
 

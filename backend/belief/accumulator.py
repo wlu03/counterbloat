@@ -60,7 +60,10 @@ class EvidenceContribution:
 
 
 class EvidenceAccumulator:
-    """One active contribution per provenance group; not a truth oracle."""
+    """Holds one active contribution per provenance group.
+
+    Its score does not establish whether a claim is true.
+    """
 
     def __init__(self, prior: float, tempering: float = 1.0) -> None:
         self._prior_logit = logit(prior)
@@ -83,7 +86,7 @@ class EvidenceAccumulator:
         return True
 
     def withdraw(self, group_id: str) -> bool:
-        """Remove an active group; its historical record lives upstream."""
+        """Remove an active group. The caller keeps the historical record."""
         return self._groups.pop(group_id, None) is not None
 
     def raw_logit(self) -> float:
