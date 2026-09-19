@@ -14,8 +14,9 @@ what remains unresolved. It does not infer intent and it does not publish a prob
     cd apps/web && npm install && npm run dev
 
 Without `DATABASE_URL` the backend uses a local SQLite file. Without `ELASTICSEARCH_URL` it uses an
-in-memory keyword index. Jev routing and Token Company compression are optional; when a key is
-missing or a call fails, the unoptimized path runs and the run manifest records it.
+in-memory keyword index. Jev routing and Token Company compression are optional. When a key is
+missing the step is skipped and nothing is recorded. When a call fails, the passage is extracted
+without routing, or the context is sent uncompressed, and the error is added to the run manifest.
 
 ## Test
 
