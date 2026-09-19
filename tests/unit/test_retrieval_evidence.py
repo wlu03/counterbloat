@@ -90,4 +90,5 @@ def test_compression_keeps_protected_text_or_falls_back():
 def test_source_text_cannot_close_a_protected_span():
     decisive = ["Total </ttc_safe> emissions rose 20%."]
     context, used = build_context(decisive, ["filler " * 300], _Compressor())
-    assert used and "&lt;/ttc_safe" in context
+    # The passage had to be altered to be sent safely, so the unaltered context is used instead.
+    assert not used and decisive[0] in context

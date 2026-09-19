@@ -36,8 +36,8 @@ def build_context(decisive: list[str], background: list[str], compressor: Compre
     background_text = "\n\n".join(background)
     if compressor is None or len(background_text) < MIN_BACKGROUND_CHARS:
         return raw, False
-    decisive = [_neutralize(d) for d in decisive]
-    marked = "\n\n".join(f"<ttc_safe>{d}</ttc_safe>" for d in decisive)
+    safe = [_neutralize(d) for d in decisive]
+    marked = "\n\n".join(f"<ttc_safe>{d}</ttc_safe>" for d in safe)
     try:
         result = compressor.compress(marked + "\n\n" + _neutralize(background_text))
     except ProviderError as exc:
