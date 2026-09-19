@@ -1,9 +1,0 @@
-.venv/
-__pycache__/
-data/
-*.predictions.jsonl
-*.scores.json
-*.details.jsonl
-*.run.json
-oracle/
-review.csv

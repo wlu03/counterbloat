@@ -51,4 +51,4 @@ Evidence IDs come from `allowed_evidence_ids` and are namespaced by assertion. N
 
 Optional `probabilities` maps exactly the three lowercase material labels to finite values in [0,1], summing to 1; the chosen material label must maximize them. Missing probabilities leave calibration metrics unavailable. `undetermined` is a legitimate rubric prediction; `status="abstained"` is a separate operational choice.
 
-`pending`, `abstained`, and `error` predictions need no label fields but must retain `example_id` and `mode`. They stay in the declared denominator. All supplied ASA references are drafts; completed predictions can only receive a **provisional retrospective comparison** with explicit `--allow-draft`. Full schema: `schema/asa_prediction.schema.json`.
+`pending`, `abstained`, and `error` predictions need no label fields but must retain `example_id` and `mode`. They stay in the declared denominator. All supplied ASA references are drafts; completed predictions can only receive a **provisional retrospective comparison** with explicit `--allow-draft`. Full schema: `../asa/prediction.schema.json`.

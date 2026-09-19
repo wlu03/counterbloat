@@ -54,8 +54,8 @@ Do not remove attribution or apply the kit code's license to the datasets. Obtai
 
 ## ASA user-supplied pack — added in v1.1
 
-Source: user-uploaded `ASA_test_pack_2026-09-19(1).zip`, internal version 0.1.0, compiled 2026-09-19. Preserved byte-for-byte as `bundled/ASA_test_pack_2026-09-19.zip`; SHA256 `95119566d269a3194bff913fda98cb65f9a461a9e53dcf99ee0d0b871d8f3157`.
+Source: user-uploaded `ASA_test_pack_2026-09-19(1).zip`, internal version 0.1.0, compiled 2026-09-19. Not redistributed here; the normalized packets under `../asa/` derive from it. SHA256 `95119566d269a3194bff913fda98cb65f9a461a9e53dcf99ee0d0b871d8f3157`.
 
-The original README/manifest and review workbook remain in that archive. The source supplies short claim excerpts and compiler paraphrases, not a republication license for full rulings, original advertisements, or studies. ASA and relevant third parties retain rights in their materials. This integration does not extend the kit-code license to the source data, establish permission for broader redistribution, or represent endorsement by ASA. Consult the preserved source notices before reuse or publication.
+The original README/manifest and review workbook are in that upload, which is not included here. The source supplies short claim excerpts and compiler paraphrases, not a republication license for full rulings, original advertisements, or studies. ASA and relevant third parties retain rights in their materials. This integration does not extend the kit-code license to the source data, establish permission for broader redistribution, or represent endorsement by ASA. Consult the preserved source notices before reuse or publication.
 
 The normalized fields and local scorer do not independently validate the compiler's factual interpretations. The source's draft labels remain drafts. No original advertisements or new independent evidence have been collected as part of this update.

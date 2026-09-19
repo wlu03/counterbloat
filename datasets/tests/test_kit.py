@@ -7,11 +7,11 @@ import unittest
 import zipfile
 from pathlib import Path
 from unittest.mock import patch
-from benchkit.adapters import convert, finqa_context, write_prepared, oracle_inputs
-from benchkit.io import read_rows, write_jsonl, write_json, download, digest, git_blob_hash, extract_json_archive
-from benchkit.scoring import align, numeric_value, numeric_equal, safe_program, score_finqa, score_averitec, score_financebench
-from benchkit.cli import prediction_template, export_runtime
-from benchkit.sources import LABELS
+from datasets.benchkit.adapters import convert, finqa_context, write_prepared, oracle_inputs
+from datasets.benchkit.io import read_rows, write_jsonl, write_json, download, digest, git_blob_hash, extract_json_archive
+from datasets.benchkit.scoring import align, numeric_value, numeric_equal, safe_program, score_finqa, score_averitec, score_financebench
+from datasets.benchkit.cli import prediction_template, export_runtime
+from datasets.benchkit.sources import LABELS
 from types import SimpleNamespace
 
 

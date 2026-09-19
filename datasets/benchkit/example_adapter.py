@@ -2,7 +2,7 @@
 
 The supplied adapter deliberately abstains. It is not a model and produces no
 benchmark performance claims. `runtime_dir` contains no bundled gold annotations.
-Example: python benchmark.py run --adapter example_adapter:predict --output abstentions.jsonl
+Example: python -m datasets.benchmark run --adapter datasets.benchkit.example_adapter:predict --output abstentions.jsonl
 """
 from pathlib import Path
 

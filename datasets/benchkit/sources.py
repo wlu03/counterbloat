@@ -15,7 +15,7 @@ SOURCES = {
         "title": "ASA assertion-level starter pack (user-supplied, unreviewed drafts)",
         "split": "diagnostic_no_official_split", "expected_count": 30,
         "revision": "uploaded-v0.1.0-2026-09-19",
-        "source_archive": "bundled/ASA_test_pack_2026-09-19.zip",
+        "source_archive_name": "ASA_test_pack_2026-09-19.zip",
         "source_archive_sha256": "95119566d269a3194bff913fda98cb65f9a461a9e53dcf99ee0d0b871d8f3157",
         "license": "Preserve uploaded notices; no new rights over ASA or third-party material are asserted",
         "data_bundled": True,

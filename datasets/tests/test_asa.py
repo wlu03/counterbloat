@@ -1,6 +1,7 @@
 """ASA mapping, readiness, leakage and scoring tests. Not model performance."""
 import copy
 import csv
+import shutil
 import json
 import math
 import tempfile
@@ -9,13 +10,15 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 from types import SimpleNamespace
-from benchkit import asa
-from benchkit.io import read_rows, write_json, write_jsonl
-from benchkit.scoring import align
-from benchkit.cli import export_runtime, run_adapter
+from datasets.benchkit import asa
+from datasets.benchkit.io import read_rows, write_json, write_jsonl
+from datasets.benchkit.scoring import align
+from datasets.benchkit.cli import export_runtime, run_adapter
 
 BASE = Path(__file__).resolve().parents[1]
-ARCHIVE = BASE/'bundled/ASA_test_pack_2026-09-19.zip'
+# The original pack is not kept in the repo. Drop it here to run the tests that read it.
+ARCHIVE = BASE/'asa/ASA_test_pack_2026-09-19.zip'
+needs_archive = unittest.skipUnless(ARCHIVE.exists(), 'original ASA pack not present')
 
 
 def fixture():
@@ -47,6 +50,7 @@ def prediction(ref, **changes):
 
 
 class SourceTests(unittest.TestCase):
+    @needs_archive
     def test_pinned_uploaded_archive_and_inner_hashes(self):
         s=asa.load_source(ARCHIVE)
         self.assertEqual(len(s['references']),30)
@@ -96,6 +100,7 @@ class SourceTests(unittest.TestCase):
         inp,_,docs,_=asa.convert(s,'retrospective')
         self.assertEqual(len({d['document_id'] for d in docs}),2)
         self.assertEqual(len({d['source_document_id'] for d in docs}),1)
+    @needs_archive
     def test_actual_pack_summary_identity_integrity(self):
         inp,refs,docs,mappings=asa.convert(asa.load_source(ARCHIVE),'retrospective')
         self.assertEqual(len(docs),30);self.assertEqual(len({d['document_id'] for d in docs}),30)
@@ -213,10 +218,12 @@ class NativeConversionTests(unittest.TestCase):
 class PreparedPacketTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.root=Path(self.tmp.name)/'packet'
-        asa.prepare(self.root,ARCHIVE,'retrospective',True)
+        shutil.copytree(BASE/'asa/retrospective',self.root)
     def tearDown(self):self.tmp.cleanup()
+    @needs_archive
     def test_mode_cannot_be_reused_in_same_root(self):
         with self.assertRaises(ValueError):asa.prepare(self.root,ARCHIVE,'independent',True)
+    @needs_archive
     def test_repeat_preparation_is_idempotent(self):
         before=(self.root/'manifest.json').read_bytes()
         asa.prepare(self.root,ARCHIVE,'retrospective',True)
@@ -239,23 +246,23 @@ class PreparedPacketTests(unittest.TestCase):
             return {'status':'abstained','reason':'Synthetic adapter boundary test'}
         args=SimpleNamespace(dataset='asa',mode='retrospective',ids=None,adapter='synthetic:predict',output=str(Path(self.tmp.name)/'pred.jsonl'))
         # If the runner read evaluator references it would fail after we remove them.
-        import shutil
         shutil.rmtree(self.root/'evaluator_only')
-        with patch('benchkit.cli.importlib.import_module',return_value=SimpleNamespace(predict=fake)):
+        with patch('datasets.benchkit.cli.importlib.import_module',return_value=SimpleNamespace(predict=fake)):
             run_adapter(args,self.root)
         rows=read_rows(Path(args.output))
         self.assertEqual(len(rows),30);self.assertTrue(all(r['status']=='abstained' for r in rows))
         self.assertTrue(all(r['mode']=='retrospective' for r in rows))
     def test_runner_catches_bad_output_as_error(self):
         args=SimpleNamespace(dataset='asa',mode='retrospective',ids=None,adapter='synthetic:predict',output=str(Path(self.tmp.name)/'bad.jsonl'))
-        with patch('benchkit.cli.importlib.import_module',return_value=SimpleNamespace(predict=lambda a,b: {'status':'ok','material_overstatement':'Upheld'})):
+        with patch('datasets.benchkit.cli.importlib.import_module',return_value=SimpleNamespace(predict=lambda a,b: {'status':'ok','material_overstatement':'Upheld'})):
             run_adapter(args,self.root)
         self.assertTrue(all(r['status']=='error' for r in read_rows(Path(args.output))))
     def test_independent_metadata_flag_alone_not_ready(self):
-        root=Path(self.tmp.name)/'independent';asa.prepare(root,ARCHIVE,'independent',True)
+        root=Path(self.tmp.name)/'independent';shutil.copytree(BASE/'asa/independent',root)
         meta=json.loads((root/'runtime/metadata.json').read_text());meta['independent_scoring_ready']=True
         write_json(root/'runtime/metadata.json',meta)
         with self.assertRaises(ValueError):asa.assert_runtime_mode(root,'independent',require_ready=True)
+    @needs_archive
     def test_prepare_requires_license_ack(self):
         with self.assertRaises(ValueError):asa.prepare(Path(self.tmp.name)/'new',ARCHIVE,'retrospective',False)
     def test_review_sheet_is_blank_not_adjudication(self):

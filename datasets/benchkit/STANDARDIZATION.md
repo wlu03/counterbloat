@@ -2,7 +2,7 @@
 
 ## Shared interfaces, not a fabricated common label
 
-All four datasets use `benchmark.py` with the same prepare/validate/select/template/run/score entry points and `predict(example, runtime_dir) -> dict` adapter. Every record has a stable string `example_id`, `dataset`, and `task`. Prediction status uses `ok`, `pending`, `abstained`, or `error`. Missing and failed cases stay in the declared denominator.
+All four datasets use `python -m datasets.benchmark` with the same prepare/validate/select/template/run/score entry points and `predict(example, runtime_dir) -> dict` adapter. Every record has a stable string `example_id`, `dataset`, and `task`. Prediction status uses `ok`, `pending`, `abstained`, or `error`. Missing and failed cases stay in the declared denominator.
 
 FinQA's answer/program target, FinanceBench's answer/citation target, and AVeriTeC's native verdict space are unchanged. ASA adds `task="corporate_claim_assessment"` and its two-axis rubric. There is no universal `true/false` mapping or aggregated four-dataset accuracy.
 
@@ -26,9 +26,9 @@ FinQA's answer/program target, FinanceBench's answer/citation target, and AVeriT
 
 ## ASA mode isolation
 
-`data/asa/retrospective/runtime` includes answer-bearing compiler summaries, explicitly marked. `data/asa/independent/runtime` contains only the source pack's claim candidates and an empty corpus. The two modes occupy different filesystem roots. Do not mount their shared parent as the model's source directory.
+`asa/retrospective/runtime` includes answer-bearing compiler summaries, explicitly marked. `asa/independent/runtime` contains only the source pack's claim candidates and an empty corpus. The two modes occupy different filesystem roots. Do not mount their shared parent as the model's source directory.
 
-Raw source data and review workbook remain in `bundled/ASA_test_pack_2026-09-19.zip`, byte-for-byte. SHA256: `95119566d269a3194bff913fda98cb65f9a461a9e53dcf99ee0d0b871d8f3157`.
+Raw source data and the review workbook stay in the original upload, which is not included here. SHA256: `95119566d269a3194bff913fda98cb65f9a461a9e53dcf99ee0d0b871d8f3157`.
 
 The prepared files carry hashes. Validation checks field allowlists, mode alignment, source identity, evidence references, document hashes, and unexpected runtime files. It does not prove that source facts are correct or establish historical availability.
 

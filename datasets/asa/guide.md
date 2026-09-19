@@ -5,20 +5,20 @@
 The included normalized retrospective packet has 30 assertions and 30 short, answer-bearing compiler summaries derived from 24 rulings. It supports **retrospective interpretation**. All reference labels are unreviewed compiler drafts. ASA did not author or endorse this test pack.
 
 ```bash
-python benchmark.py validate --dataset asa --mode retrospective
-python benchmark.py run --dataset asa --mode retrospective --adapter my_adapter:predict --output outputs/asa.predictions.jsonl
-python benchmark.py score --dataset asa --mode retrospective --allow-draft --predictions outputs/asa.predictions.jsonl --output outputs/asa.metrics.json
+python -m datasets.benchmark validate --dataset asa --mode retrospective
+python -m datasets.benchmark run --dataset asa --mode retrospective --adapter my_adapter:predict --output outputs/asa.predictions.jsonl
+python -m datasets.benchmark score --dataset asa --mode retrospective --allow-draft --predictions outputs/asa.predictions.jsonl --output outputs/asa.metrics.json
 ```
 
-The original three benchmark commands are unchanged. An ASA-only ZIP defaults `--dataset` to `asa`; retaining it explicitly also works. Always specify `--mode`.
+The original three benchmark commands are unchanged. Always pass `--dataset asa` and `--mode`.
 
 ## Input / model request
 
-Read `runtime/inputs.jsonl`. For each example, select only records from `runtime/corpus/passages.jsonl` with its `example_id` and an ID in `allowed_evidence_ids`. Never retrieve another case's summary as evidence for this claim. `example_asa_adapter.build_request` implements this filtering.
+Read `runtime/inputs.jsonl`. For each example, select only records from `runtime/corpus/passages.jsonl` with its `example_id` and an ID in `allowed_evidence_ids`. Never retrieve another case's summary as evidence for this claim. `../benchkit/example_asa_adapter.py`'s `build_request` implements this filtering.
 
 Your model instruction should clearly say that a supplied assessment summary contains answer-bearing information. Ask it to interpret that summary and the claim's scope, not pretend to independently investigate the allegation. Do not give it compiler draft labels or the reference workbook.
 
-Use `prompts/asa_retrospective.txt` as a task instruction. Return the normalized output contract in `PREDICTION_FORMAT.md`. A program should not add raw summary text as an additional independent observation when it also retrieves the underlying ruling.
+Use `prompt_retrospective.txt` as a task instruction. Return the normalized output contract in `../benchkit/PREDICTION_FORMAT.md`. A program should not add raw summary text as an additional independent observation when it also retrieves the underlying ruling.
 
 ## Evidence and target semantics
 
@@ -29,8 +29,8 @@ The supplied per-case summaries are not full rulings, original ads, source studi
 ## Independent candidates
 
 ```bash
-python benchmark.py validate --dataset asa --mode independent
-python benchmark.py export-runtime --dataset asa --mode independent --output outputs/asa.independent.candidates.zip
+python -m datasets.benchmark validate --dataset asa --mode independent
+python -m datasets.benchmark export-runtime --dataset asa --mode independent --output outputs/asa.independent.candidates.zip
 ```
 
 This is an ingestion/curation packet only. All 30 cases lack admitted independent evidence and adjudicated references. `run` and `score` in independent mode refuse to proceed; `--allow-draft` cannot bypass this. Changing a readiness flag alone is insufficient. Independent evaluation needs original-context capture, explicit cutoffs, admissible evidence, and evidence-conditioned review in a new versioned dataset. This integration does not fabricate those missing materials.
@@ -38,18 +38,18 @@ This is an ingestion/curation packet only. All 30 cases lack admitted independen
 ## Reusing outputs from the original ASA pack
 
 ```bash
-python benchmark.py import-predictions --dataset asa --mode retrospective --predictions native_predictions.jsonl --output outputs/asa.normalized.jsonl
-python benchmark.py native-export --dataset asa --mode retrospective --predictions outputs/asa.normalized.jsonl --output outputs/asa.native
+python -m datasets.benchmark import-predictions --dataset asa --mode retrospective --predictions native_predictions.jsonl --output outputs/asa.normalized.jsonl
+python -m datasets.benchmark native-export --dataset asa --mode retrospective --predictions outputs/asa.normalized.jsonl --output outputs/asa.native
 ```
 
-Native exports can be scored using the original `scripts/score.py` in the preserved source archive. Supply exported `references.jsonl`, `--mode retrospective`, and `--allow-draft`. This is the compiler's local scorer, not an official ASA benchmark. A native export requires completed predictions for every selected row.
+Native exports can be scored using the original `scripts/score.py` in the upstream pack, which is not included here. Supply exported `references.jsonl`, `--mode retrospective`, and `--allow-draft`. This is the compiler's local scorer, not an official ASA benchmark. A native export requires completed predictions for every selected row.
 
 ## Small runs
 
 ```bash
-python benchmark.py select --dataset asa --mode retrospective --count 5 --seed 20260919 --output outputs/asa.pilot.ids.json
-python benchmark.py run --dataset asa --mode retrospective --ids outputs/asa.pilot.ids.json --adapter my_adapter:predict --output outputs/asa.pilot.predictions.jsonl
-python benchmark.py score --dataset asa --mode retrospective --allow-draft --ids outputs/asa.pilot.ids.json --predictions outputs/asa.pilot.predictions.jsonl --output outputs/asa.pilot.metrics.json
+python -m datasets.benchmark select --dataset asa --mode retrospective --count 5 --seed 20260919 --output outputs/asa.pilot.ids.json
+python -m datasets.benchmark run --dataset asa --mode retrospective --ids outputs/asa.pilot.ids.json --adapter my_adapter:predict --output outputs/asa.pilot.predictions.jsonl
+python -m datasets.benchmark score --dataset asa --mode retrospective --allow-draft --ids outputs/asa.pilot.ids.json --predictions outputs/asa.pilot.predictions.jsonl --output outputs/asa.pilot.metrics.json
 ```
 
 Selection is ID-hash based without reading labels. It is a diagnostic subset, **not** a new train/test split. For future group-disjoint testing use `evaluator_only/id_mapping.jsonl`; do not treat the 30 assertions as 30 independent companies.

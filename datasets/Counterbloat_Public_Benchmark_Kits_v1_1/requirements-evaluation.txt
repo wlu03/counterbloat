@@ -1,8 +1,0 @@
-# Optional dependencies for the downloaded upstream evaluators.
-# The kit's adapters, local classification metrics, and basic CLI use only Python's standard library.
-numpy>=1.26,<3
-scipy>=1.11,<2
-scikit-learn>=1.3,<2
-nltk>=3.8,<4
-sympy>=1.12,<2
-tqdm>=4.66,<5

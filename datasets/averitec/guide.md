@@ -9,8 +9,8 @@ Use native labels: `Supported`, `Refuted`, `Not Enough Evidence`, and `Conflicti
 ## Prepare the small claim/reference files
 
 ```bash
-python benchmark.py prepare --dataset averitec --accept-license
-python benchmark.py validate --dataset averitec
+python -m datasets.benchmark prepare --dataset averitec --accept-license
+python -m datasets.benchmark validate --dataset averitec
 ```
 
 The original zero-based dev row order is preserved as `claim_id`, with IDs such as `averitec-dev-0000`. Never renumber a subset: the knowledge-store mapping uses the original indices. The downloader checks the expected count and records hashes. It has not run in the authoring session.
@@ -21,10 +21,10 @@ The model receives the claim and permitted metadata. Native verdicts, justificat
 
 ```bash
 # Print the planned URL and size, without downloading the archive.
-python benchmark.py corpus --dataset averitec --accept-license
+python -m datasets.benchmark corpus --dataset averitec --accept-license
 
 # Approximately 11.5 GB download plus extraction space.
-python benchmark.py corpus --dataset averitec --accept-license --confirm-large-download --extract
+python -m datasets.benchmark corpus --dataset averitec --accept-license --confirm-large-download --extract
 ```
 
 The published SHA256 is checked. Interrupted downloads support resumption where the server supports ranges. JSON/JSONL archive extraction is path-safe; pickle/model files are never deserialized. A corpus manifest is written after successful completion.
@@ -40,9 +40,9 @@ Implement `my_adapter:predict`. Native output example (format only, not a verdic
 ```
 
 ```bash
-python benchmark.py select --dataset averitec --count 25 --output pilot.ids.json
-python benchmark.py run --dataset averitec --ids pilot.ids.json --adapter my_adapter:predict --output pilot.predictions.jsonl
-python benchmark.py score --dataset averitec --ids pilot.ids.json --predictions pilot.predictions.jsonl --output pilot.verdict_scores.json
+python -m datasets.benchmark select --dataset averitec --count 25 --output pilot.ids.json
+python -m datasets.benchmark run --dataset averitec --ids pilot.ids.json --adapter my_adapter:predict --output pilot.predictions.jsonl
+python -m datasets.benchmark score --dataset averitec --ids pilot.ids.json --predictions pilot.predictions.jsonl --output pilot.verdict_scores.json
 ```
 
 Omit `--ids` to evaluate all 500 after freezing prompts and settings. The included abstaining adapter only checks wiring. Do not train/calibrate on this holdout and continue calling it untouched.
@@ -56,7 +56,7 @@ For that score:
 ```bash
 python -m pip install -r requirements-evaluation.txt
 python -m nltk.downloader punkt punkt_tab wordnet omw-1.4
-python benchmark.py official-export --dataset averitec --predictions pilot.predictions.jsonl --ids pilot.ids.json --output official_averitec
+python -m datasets.benchmark official-export --dataset averitec --predictions pilot.predictions.jsonl --ids pilot.ids.json --output official_averitec
 ```
 
 Run the exact command in `official_averitec/COMMAND.txt`. It calls the downloaded, pinned original evaluation script. Native reference rows are aligned in the same order as exported predictions; absent outputs remain in the denominator. The export uses an empty QA placeholder for missing evidence to avoid empty-array problems in older matching code. That placeholder is not evidence.
@@ -66,7 +66,7 @@ Official automatic evidence matching is a proxy. Valid alternative evidence may 
 ## Oracle interpretation test
 
 ```bash
-python benchmark.py oracle --dataset averitec --acknowledge-oracle --output oracle/averitec.inputs.jsonl
+python -m datasets.benchmark oracle --dataset averitec --acknowledge-oracle --output oracle/averitec.inputs.jsonl
 ```
 
 This supplies the annotated questions/answers and therefore some human decomposition. Use a separate oracle-aware caller: the default `run` command intentionally reads only normal runtime inputs. Clearly label these as oracle-evidence results, not independent evidence retrieval.

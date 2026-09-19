@@ -4,7 +4,7 @@ No LLM is called. Replace predict() with your real system integration; build_req
 supplies the standardized claim and its permitted, assertion-scoped passages.
 """
 from pathlib import Path
-from benchkit.io import read_rows
+from .io import read_rows
 
 
 def build_request(example: dict, runtime_dir: Path) -> dict:

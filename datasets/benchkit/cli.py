@@ -371,10 +371,9 @@ def export_runtime(args,root):
 
 def main():
     base=Path(__file__).resolve().parents[1]
-    defaults=json.loads((base/'package.json').read_text()) if (base/'package.json').exists() else {}
     p=argparse.ArgumentParser(description='Unified benchmark interfaces. ASA is bundled; the original three datasets download on your machine.')
     p.add_argument('command',choices=['prepare','validate','select','template','run','score','review-sheet','oracle','official-export','corpus','extract-pdfs','export-runtime','import-predictions','native-export'])
-    p.add_argument('--dataset',choices=list(SOURCES),default=defaults.get('default_dataset'))
+    p.add_argument('--dataset',choices=list(SOURCES))
     p.add_argument('--data-dir',type=Path)
     p.add_argument('--mode',choices=asa.MODES,help='Required for ASA: keeps answer-bearing retrospective and claim-only independent packets separate')
     p.add_argument('--allow-draft',action='store_true',help='Explicitly permit a provisional ASA retrospective draft comparison; never independent scoring')
@@ -399,7 +398,7 @@ def main():
         p.error('ASA requires --mode retrospective or --mode independent')
     if args.dataset != 'asa' and (args.mode is not None or args.allow_draft):
         p.error('--mode and --allow-draft apply only to ASA')
-    root=args.data_dir or (base/'data'/'asa'/args.mode if args.dataset=='asa' else base/'data'/args.dataset)
+    root=args.data_dir or (base/'asa'/args.mode if args.dataset=='asa' else base/args.dataset)
     source=SOURCES[args.dataset]
     try:
         output_commands={'select','template','run','score','review-sheet','oracle','official-export','export-runtime','import-predictions','native-export'}
@@ -417,7 +416,10 @@ def main():
             asa.assert_runtime_mode(root,args.mode)
         if args.command=='prepare':
             if args.dataset=='asa':
-                archive=args.input_file or base/source['source_archive']
+                if not args.input_file:
+                    raise ValueError(f"ASA prepare needs --input-file pointing at {source['source_archive_name']}; "
+                                     'the packets under asa/ are already prepared')
+                archive=args.input_file
                 asa.prepare(root,archive,args.mode,args.accept_license)
             else:
                 prep(args,root,source)
