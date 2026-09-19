@@ -142,7 +142,9 @@ and in no reference calculation (listed, not judged, because they can be correct
 whether a probability was stated, and how many other findings were returned. With `--repeats`
 above 1 it records the share of cases that got the same status in every repeat. Cost is reported
 as OpenAI calls and tokens, Devin sessions and ACUs, and seconds, and it includes runs that
-failed. A key number counts when it is among the calculated values, where a share given as a
+failed. The ACU figure is what the Devin API reported when each session ended. In the first
+check it was 0.0 for a finished session, so the billed amount can be higher: check the Devin
+usage page. A key number counts when it is among the calculated values, where a share given as a
 fraction of 1 counts as its percentage. In the summary or rewrite it counts only when the
 documents do not contain that number, because restating the claim is not a calculation.
 

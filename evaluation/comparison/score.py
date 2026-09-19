@@ -121,5 +121,7 @@ def summarise(rows: list[dict]) -> dict:
             "input_tokens": sum(r["usage"].get("input_tokens", 0) for r in rows),
             "output_tokens": sum(r["usage"].get("output_tokens", 0) for r in rows),
             "sessions": sum(r["usage"].get("sessions", 0) for r in rows),
-            "acus": sum(r["usage"].get("acus") or 0 for r in rows) or None,
+            # The figure Devin reported when each session ended. None when no session reported one.
+            "acus": (sum(a for a in acus) if (acus := [r["usage"]["acus"] for r in rows
+                                                        if r["usage"].get("acus") is not None]) else None),
             "seconds": round(sum(r["seconds"] for r in rows), 1)}
