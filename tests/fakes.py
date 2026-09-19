@@ -70,7 +70,8 @@ class FakeLLM:
             return InputDraft(name=name, value=number, unit=unit, period=period, population=None,
                               boundary=None, source_span_id=source)
 
-        program = ProgramDraft(note="totals from reported intensity and output", inputs=[
+        program = ProgramDraft(note="totals from reported intensity and output",
+                               claim_output="total_change", claim_expected="-40", inputs=[
             value("i24", "10", "kg CO2e/unit", "2024", intensity),
             value("i25", "6", "kg CO2e/unit", "2025", intensity),
             value("u24", "1,000", "unit", "2024", units),
@@ -89,11 +90,19 @@ class FakeLLM:
         ]
         return EvidenceAnalysis(judgments=judgments, programs=[program], answers=answers)
 
-    def update_state(self, state, new_evidence_ids):
+    def update_state(self, state, new_evidence_ids, new_calculation_ids):
+        # The verdict depends on the verified calculations in the state it is given.
+        self.seen_calculations = [c.model_copy(deep=True) for c in state.calculations]
+        tested = [c for c in state.calculations if c.claim_relation == "disagrees"]
+        if not tested:
+            return StateUpdate(status=EvidenceStatus.insufficient, mechanisms=[], summary="",
+                               unresolved=["No calculation tests the claim yet."], explanation="")
+        change = tested[0].outputs[tested[0].claim_output]
         return StateUpdate(status=EvidenceStatus.contradicted,
                            mechanisms=[Mechanism.scope, Mechanism.magnitude],
                            summary="The figures support lower emissions per unit, not lower totals.",
-                           unresolved=[], explanation="Totals computed from the report rose 20%.")
+                           unresolved=[],
+                           explanation=f"Totals computed from the report changed by {change}%.")
 
     def review(self, state, decisive):
         return ReviewResult(decision="accept", narrowed_status=None, reasons=[])

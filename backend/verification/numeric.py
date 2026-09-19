@@ -45,6 +45,27 @@ def _unit_product(a: str, b: str) -> str:
     return f"{a}*{b}"
 
 
+def claim_relation(outputs: dict[str, Decimal], claim_output: str | None,
+                   claim_expected: str | None, claim_text: str) -> tuple[Decimal | None, str]:
+    """Compare the named output with the value the claim states.
+
+    The expected value must be a number written in the claim. Agreement is judged to the
+    precision of that number, so a stated 40 agrees with 39.6 and not with 38.
+    """
+    if not claim_output or claim_output not in outputs or not claim_expected:
+        return None, "none"
+    try:
+        expected = parse_number(claim_expected)
+    except CalculationError:
+        return None, "none"
+    stated = {abs(parse_number(n)) for n in re.findall(r"\d[\d,]*\.?\d*", claim_text)}
+    if abs(expected) not in stated:
+        return None, "none"
+    tolerance = Decimal(1).scaleb(expected.as_tuple().exponent) / 2
+    agrees = abs(outputs[claim_output] - expected) <= tolerance
+    return expected, "agrees" if agrees else "disagrees"
+
+
 def execute(calc_id: str, claim_id: str, inputs: list[CalcInput], steps: list[CalcStep],
             note: str = "", lineage: list[str] | None = None) -> Calculation:
     values = {i.name: i.value for i in inputs}

@@ -24,7 +24,9 @@ from backend.providers import prompts
 from backend.providers.base import LLM, Compressor, EvidenceAnalysis, ProviderError, Router
 from backend.retrieval.discovery import discover
 from backend.retrieval.search import SearchIndex, retrieve
-from backend.verification.numeric import CalculationError, execute, parse_number, value_in_source
+from backend.verification.numeric import (
+    CalculationError, claim_relation, execute, parse_number, value_in_source,
+)
 
 
 @dataclass
@@ -95,8 +97,12 @@ def _calculations(analysis: EvidenceAnalysis, state: InvestigationState,
                 continue  # the same calculation was already recorded
             done.append(key(inputs, program.steps))
             spans = [i.source_span_id for i in inputs]
-            results.append(execute(calc_id, state.claim.id, inputs, program.steps, program.note,
-                                   lineage(state, spans)))
+            result = execute(calc_id, state.claim.id, inputs, program.steps, program.note,
+                             lineage(state, spans))
+            result.claim_output = program.claim_output
+            result.claim_expected, result.claim_relation = claim_relation(
+                result.outputs, program.claim_output, program.claim_expected, state.claim.text)
+            results.append(result)
         except (CalculationError, ValueError) as exc:
             manifest.rejections.append(f"calculation rejected: {exc}")
     return results
@@ -143,6 +149,10 @@ def investigate(analysis_id: str, claim: Claim, deps: Deps, llm: LLM, manifest: 
         known = {e.id for e in state.evidence}
         changed = reconcile(state, items, repeats)
         calculations = _calculations(analysis, state, shown, manifest)
+        # Evidence, answers, and verified calculations are recorded before the updater runs, so
+        # the updater decides with the current round's results in front of it. They stay
+        # recorded if the updater fails. Each calculation is appended here and nowhere else.
+        state.calculations += calculations
         apply_answers(state, analysis.answers)
         state.round += 1
         if not changed and not calculations:
@@ -151,12 +161,13 @@ def investigate(analysis_id: str, claim: Claim, deps: Deps, llm: LLM, manifest: 
             break
         new_ids = [e.id for e in state.evidence if e.id not in known]
         try:
-            update = llm.update_state(state, new_ids)
+            update = llm.update_state(state, new_ids, [c.id for c in calculations])
         except ProviderError as exc:
             manifest.errors.append(str(exc))
             state.stop_reason = "provider_error"
             break
-        record = apply_update(state, update, new_ids, calculations, prompts.VERSION)
+        record = apply_update(state, update, new_ids, [c.id for c in calculations],
+                              prompts.VERSION)
         store.put("updates", record.id, record, claim_id=claim.id)
         store.put("states", f"{analysis_id}-{claim.id}", state, analysis_id=analysis_id,
                   claim_id=claim.id)

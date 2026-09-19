@@ -133,3 +133,61 @@ def test_a_renamed_copy_of_a_calculation_is_recorded_once(store):
     _run(deps, [REPORT])
     [state] = store.find("states", InvestigationState, analysis_id="an-1")
     assert len(state.calculations) == 1
+
+
+def test_updater_sees_the_calculations_of_the_current_round(store):
+    """The scripted updater returns contradicted only if the verified totals are in its input."""
+    seen = {}
+
+    class Recording(FakeLLM):
+        def update_state(self, state, new_evidence_ids, new_calculation_ids):
+            seen.setdefault("outputs", [dict(c.outputs) for c in state.calculations])
+            seen.setdefault("new", list(new_calculation_ids))
+            return super().update_state(state, new_evidence_ids, new_calculation_ids)
+
+    deps = _deps(store)
+    deps.llm_factory = Recording
+    [finding] = _run(deps, [REPORT])
+    [totals] = seen["outputs"]
+    assert totals["e24"] == Decimal(10000) and totals["e25"] == Decimal(12000)
+    assert totals["total_change"] == Decimal(20) and totals["intensity_reduction"] == Decimal(40)
+    assert len(seen["new"]) == 1
+    assert finding.evidence_status == EvidenceStatus.contradicted
+    [state] = store.find("states", InvestigationState, analysis_id="an-1")
+    assert [c.claim_relation for c in state.calculations] == ["disagrees"]
+
+
+def test_a_side_calculation_does_not_justify_a_verdict(store):
+    """The totals are computed but not linked to the claim, and the model still says contradicted."""
+    class Unlinked(FakeLLM):
+        def analyze_evidence(self, claim, questions, context):
+            analysis = super().analyze_evidence(claim, questions, context)
+            analysis.programs[0].claim_output = analysis.programs[0].claim_expected = None
+            return analysis
+
+        def update_state(self, state, new_evidence_ids, new_calculation_ids):
+            from backend.providers.base import StateUpdate
+            return StateUpdate(status="contradicted", mechanisms=["scope"], summary="s",
+                               unresolved=[], explanation="e")
+
+    deps = _deps(store)
+    deps.llm_factory = Unlinked
+    [finding] = _run(deps, [REPORT])
+    assert finding.evidence_status == EvidenceStatus.insufficient
+
+
+def test_observations_survive_a_failed_updater_without_a_transition(store):
+    from backend.providers.base import ProviderError
+
+    class UpdaterDown(FakeLLM):
+        def update_state(self, state, new_evidence_ids, new_calculation_ids):
+            raise ProviderError("openai update failed: 503")
+
+    deps = _deps(store)
+    deps.llm_factory = UpdaterDown
+    _run(deps, [REPORT])
+    [state] = store.find("states", InvestigationState, analysis_id="an-1")
+    assert state.evidence and len(state.calculations) == 1
+    assert state.version == 0 and state.assessment.status == EvidenceStatus.insufficient
+    assert store.find("updates", claim_id=state.claim.id) == []
+    assert store.get("analyses", "an-1")["partial"] is True

@@ -82,8 +82,10 @@ class OpenAILLM:
         return self._parse("analyze", self.reason_model, prompts.ANALYST, payload,
                            EvidenceAnalysis)
 
-    def update_state(self, state: InvestigationState, new_evidence_ids: list[str]) -> StateUpdate:
-        payload = {"state": state.model_dump(mode="json"), "new_evidence_ids": new_evidence_ids}
+    def update_state(self, state: InvestigationState, new_evidence_ids: list[str],
+                     new_calculation_ids: list[str]) -> StateUpdate:
+        payload = {"state": state.model_dump(mode="json"), "new_evidence_ids": new_evidence_ids,
+                   "new_calculation_ids": new_calculation_ids}
         return self._parse("update", self.reason_model, prompts.UPDATER, payload, StateUpdate)
 
     def review(self, state: InvestigationState, decisive: list[SourceSpan]) -> ReviewResult:

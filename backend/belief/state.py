@@ -2,8 +2,7 @@
 from __future__ import annotations
 
 from backend.models import (
-    AnswerStatus, Assessment, BeliefUpdate, Calculation, EvidenceStatus, InvestigationState,
-    Relationship,
+    AnswerStatus, Assessment, BeliefUpdate, EvidenceStatus, InvestigationState, Relationship,
 )
 from backend.providers.base import QuestionAnswer, StateUpdate
 
@@ -22,22 +21,28 @@ def apply_answers(state: InvestigationState, answers: list[QuestionAnswer]) -> N
 
 
 def apply_update(state: InvestigationState, update: StateUpdate, new_evidence_ids: list[str],
-                 calculations: list[Calculation], model_version: str) -> BeliefUpdate:
+                 new_calculation_ids: list[str], model_version: str) -> BeliefUpdate:
+    """Commit a validated assessment. The caller has already recorded evidence and calculations."""
     previous = state.assessment.status
-    state.calculations += calculations
     status, mechanisms = update.status, update.mechanisms
-    backed = {e.relationship for e in state.evidence if e.comparable}
-    if (not any(g.active for g in state.groups) and not state.calculations) or (
-            status == EvidenceStatus.supported and Relationship.supports not in backed) or (
-            status == EvidenceStatus.contradicted and Relationship.contradicts not in backed
-            and not state.calculations):
-        # A verdict needs admitted, comparable evidence in its own direction. Without it the
-        # claim is unresolved, not false.
+    # Only evidence about the claim itself counts. Support for a side question does not.
+    backed = {e.relationship for e in state.evidence if e.comparable and e.target == "claim"}
+    tested = {c.claim_relation for c in state.calculations}
+    if (status == EvidenceStatus.supported
+            and Relationship.supports not in backed and "agrees" not in tested) or (
+            status == EvidenceStatus.contradicted
+            and Relationship.contradicts not in backed and "disagrees" not in tested):
+        # A verdict needs comparable evidence about the claim in its own direction, or a
+        # calculation whose result was compared with the value the claim states. A calculation
+        # that answers a side question does not justify a verdict. Without either, the claim
+        # is unresolved, not false.
         status, mechanisms = EvidenceStatus.insufficient, []
     state.assessment = Assessment(status=status, mechanisms=mechanisms, summary=update.summary)
     state.unresolved = update.unresolved
     state.version += 1
     return BeliefUpdate(id=f"{state.claim.id}-u{state.version}", claim_id=state.claim.id,
                         version=state.version, previous_status=previous, new_status=status,
-                        changed_evidence_ids=new_evidence_ids, explanation=update.explanation,
+                        changed_evidence_ids=new_evidence_ids,
+                        changed_calculation_ids=new_calculation_ids,
+                        explanation=update.explanation,
                         model_version=model_version)

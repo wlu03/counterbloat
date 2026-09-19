@@ -9,7 +9,7 @@ from backend.retrieval.search import SearchIndex
 
 def claim_only(llm: LLM, claim: Claim) -> StateUpdate:
     """A0: judge the claim with no retrieved evidence."""
-    return llm.update_state(InvestigationState(claim=claim), [])
+    return llm.update_state(InvestigationState(claim=claim), [], [])
 
 
 def retrieve_then_judge(llm: LLM, index: SearchIndex, store: Store, claim: Claim,
@@ -23,4 +23,4 @@ def retrieve_then_judge(llm: LLM, index: SearchIndex, store: Store, claim: Claim
                 id=f"{claim.id}-b{i}", claim_id=claim.id, span_id=span_id,
                 document_id=span["document_id"], quote=span["text"],
                 relationship=Relationship.context, target="claim"))
-    return llm.update_state(state, [e.id for e in state.evidence])
+    return llm.update_state(state, [e.id for e in state.evidence], [])

@@ -193,6 +193,11 @@ class Calculation(BaseModel):
     # Provenance groups of the inputs. A calculation is not an independent observation.
     lineage: list[str] = []
     note: str = ""
+    # The output that measures the quantity the claim states, and how it compares with the
+    # claim's stated value. "none" means the calculation only answers a side question.
+    claim_output: str | None = None
+    claim_expected: Decimal | None = None
+    claim_relation: str = "none"  # agrees | disagrees | none
 
 
 class Assessment(BaseModel):
@@ -221,6 +226,7 @@ class BeliefUpdate(BaseModel):
     previous_status: EvidenceStatus
     new_status: EvidenceStatus
     changed_evidence_ids: list[str]
+    changed_calculation_ids: list[str] = []
     explanation: str
     # Always None. No code sets these fields.
     previous_score: float | None = None
