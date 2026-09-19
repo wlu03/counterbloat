@@ -18,5 +18,8 @@ datasets/*/evaluator_only/
 datasets/*/downloads/
 datasets/*/manifest.json
 datasets/*/corpus_manifest.json
+
+# Upstream dataset sources, fetched from the publishers; not ours to redistribute.
+datasets/sources/
 .env.*
 !.env.example
