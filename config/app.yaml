@@ -1,0 +1,14 @@
+# Starting values from the specification. They have not been tuned.
+mode: live
+max_investigation_rounds: 2
+retrieval:
+  candidates_per_query: 30
+  retained_passages_per_question: 8
+  preserve_critical_context: true
+optimization:
+  jev_routing: true
+  protected_compression: true
+assessment:
+  updater: linguistic
+  public_numeric_probability: false
+  review_original_decisive_evidence: true

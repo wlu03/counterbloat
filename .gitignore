@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+objects/
+*.db
+gold/
+node_modules/
+.next/
