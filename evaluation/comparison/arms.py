@@ -13,6 +13,7 @@ import time
 from typing import Callable
 
 import httpx
+from pydantic import ValidationError
 
 from backend.config import Settings, env
 from backend.db import Store
@@ -122,8 +123,10 @@ def devin(prepared: Prepared, client: httpx.Client | None = None, max_acu: int =
             answer = client.get(f"{DEVIN_API}/{org}/sessions/{session_id}", headers=headers)
             answer.raise_for_status()
             session = answer.json()
+            # A running session with no detail yet has only just started, so it is still waited for.
             waiting = session["status"] in ("new", "claimed", "resuming") or (
-                session["status"] == "running" and session.get("status_detail") == "working")
+                session["status"] == "running"
+                and session.get("status_detail") in (None, "working"))
             if not waiting:
                 break
             if time.monotonic() - started > timeout_s:
@@ -136,4 +139,8 @@ def devin(prepared: Prepared, client: httpx.Client | None = None, max_acu: int =
     if not session.get("structured_output"):
         raise ProviderError(f"devin session {session_id} ended without structured output: "
                             f"{session['status']} {session.get('status_detail')}")
-    return AuditOutput.model_validate(session["structured_output"]), usage
+    try:
+        return AuditOutput.model_validate(session["structured_output"]), usage
+    except ValidationError as exc:
+        raise ProviderError(f"devin session {session_id} returned output in another format: "
+                            f"{exc.error_count()} errors") from exc

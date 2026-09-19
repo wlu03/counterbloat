@@ -96,6 +96,7 @@ def test_the_devin_arm_creates_one_session_polls_it_and_reads_the_structured_out
     monkeypatch.setenv("DEVIN_ORG_ID", "org-test")
     answer = AuditOutput(findings=[_finding()]).model_dump(mode="json")
     client, requests = _devin_client([
+        {"status": "running"},  # just started: no detail yet, so the client keeps waiting
         {"status": "running", "status_detail": "working"},
         {"status": "running", "status_detail": "finished", "structured_output": answer,
          "acus_consumed": 0.4, "url": "https://app/devin-1"}])
@@ -108,7 +109,12 @@ def test_the_devin_arm_creates_one_session_polls_it_and_reads_the_structured_out
     assert body["structured_output_required"] is True and body["max_acu_limit"] == 5
     assert "$ref" not in json.dumps(body["structured_output_schema"])
     assert "2024: 10 | 2025: 6" in body["prompt"] and "SECRET-RATIONALE" not in body["prompt"]
-    assert [r.method for r in requests] == ["POST", "GET", "GET"]
+    assert [r.method for r in requests] == ["POST", "GET", "GET", "GET"]
+
+    client, _ = _devin_client([{"status": "running", "status_detail": "finished",
+                                "structured_output": {"findings": [{"status": "true"}]}}])
+    with pytest.raises(ProviderError, match="another format"):
+        arms.devin(arms.Prepared(CASE), client=client, sleep=lambda s: None)
 
     client, _ = _devin_client([{"status": "exit", "status_detail": "usage_limit_exceeded"}])
     with pytest.raises(ProviderError, match="without structured output"):
