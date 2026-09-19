@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import json
 import random
-from copy import deepcopy
 from itertools import takewhile
 from pathlib import Path
 
@@ -20,7 +19,7 @@ from backend.belief import strategies
 from backend.config import AssessmentSettings
 from backend.evidence.provenance import lineage, merge, reconcile, withdraw
 from backend.models import (
-    EvidenceItem, InvestigationState, Mode, Relationship, RunManifest,
+    AnswerStatus, EvidenceItem, InvestigationState, Mode, Relationship, RunManifest,
 )
 from backend.orchestration.worker import current_commit
 from backend.providers import prompts
@@ -37,8 +36,13 @@ IRRELEVANT = "The annual general meeting was held at the registered office."
 def replay(trace: Trace, settings: AssessmentSettings, llm, manifest: RunManifest) -> dict:
     """Apply the events in order. After each change the configured strategy runs once."""
     claim = trace.claim
-    state = InvestigationState(claim=claim, questions=deepcopy(trace.questions),
-                               target=strategies.new_target(claim, trace.cutoff))
+    # Every question starts open. A saved answer is applied once all the evidence it cites has
+    # been admitted, as the worker applies a round's answers after that round's evidence.
+    answers = {q.id: q for q in trace.questions}
+    state = InvestigationState(
+        claim=claim, target=strategies.new_target(claim, trace.cutoff),
+        questions=[q.model_copy(update={"status": AnswerStatus.open, "answer": None,
+                                        "evidence_ids": []}) for q in trace.questions])
     steps = []
     complete = True
     for event in trace.events:
@@ -55,6 +59,13 @@ def replay(trace: Trace, settings: AssessmentSettings, llm, manifest: RunManifes
             repeats = {item.span_id: item.repeats_span_id} if item.repeats_span_id else {}
             changed = reconcile(state, [item], repeats) or changed
             new_evidence = [item.id]
+            admitted = {e.id for e in state.evidence}
+            for question in state.questions:
+                answer = answers[question.id]
+                if question.status == AnswerStatus.open and answer.evidence_ids \
+                        and set(answer.evidence_ids) <= admitted:
+                    question.status, question.answer = answer.status, answer.answer
+                    question.evidence_ids = list(answer.evidence_ids)
         if event.kind == "calculate":
             saved = need(event.calculation, "calculation")
             spans = [i.source_span_id for i in saved.inputs]
@@ -115,17 +126,20 @@ def _permuted(trace: Trace, rng: random.Random) -> Trace:
     return trace.model_copy(update={"events": ordered + waiting + trace.events[len(head):]})
 
 
-def variants(trace: Trace, seed: int, permutations: int) -> dict[str, Trace]:
+def variants(trace: Trace, seed: int, permutations: int) -> tuple[dict[str, Trace], str | None]:
+    """The changed sequences, and the id of the item that the single-item variants act on."""
     rng = random.Random(seed)
     out = {"base": trace}
     for k in range(permutations):
         out[f"permutation_{k}"] = _permuted(trace, rng)
     removed = {e.evidence_id for e in trace.events if e.evidence_id}
     admitted = [need(e.evidence, "evidence") for e in trace.events if e.kind == "admit"]
-    active = [e for e in admitted if e.id not in removed]
+    # Removing or correcting a context passage tests nothing, so the item must be about the claim.
+    active = [e for e in admitted if e.id not in removed and e.target == "claim"
+              and e.relationship != Relationship.context]
     if not active:
-        return out
-    pick = rng.choice(active)
+        return out, None
+    pick = random.Random(seed).choice(active)  # the same item for any number of permutations
 
     def extended(event: Event) -> Trace:
         return trace.model_copy(update={"events": trace.events + [event]})
@@ -142,7 +156,7 @@ def variants(trace: Trace, seed: int, permutations: int) -> dict[str, Trace]:
     out["correction"] = extended(Event(kind="correct", evidence_id=pick.id, evidence=pick.model_copy(
         update={"id": pick.id + "-corrected", "relationship": Relationship.context,
                 "limitations": pick.limitations + ["the source corrected this passage"]})))
-    return out
+    return out, pick.id
 
 
 def compare(runs: dict[str, dict]) -> dict:
@@ -161,10 +175,12 @@ def compare(runs: dict[str, dict]) -> dict:
         return None if a is None or b is None else abs(a - b)
 
     orders = [n for n in runs if n.startswith("permutation_")]
-    ranges = [c for c in map(score_change, orders) if c is not None]
-    summary: dict = {"order_changes_status": any(runs[n]["final_status"] != base["final_status"]
-                                           for n in orders),
-               "order_score_range": max(ranges) if ranges else None}
+    scores = [runs[n]["final_score"] for n in ["base", *orders] if runs[n]["final_score"] is not None]
+    summary: dict = {
+        # None when no other order was run, so that the report does not state a result.
+        "order_changes_status": any(runs[n]["final_status"] != base["final_status"]
+                                    for n in orders) if orders else None,
+        "order_score_range": max(scores) - min(scores) if orders and len(scores) > 1 else None}
     for name in runs:
         if name != "base" and name not in orders:
             summary[name] = {"status_changed": runs[name]["final_status"] != base["final_status"],
@@ -177,11 +193,12 @@ def run_all(trace: Trace, names: list[str], provider: str, seed: int, permutatio
             max_calls: int, prior: float, tempering: float) -> dict:
     remaining = max_calls
     results = {}
+    changed_traces, picked = variants(trace, seed, permutations)
     for name in names:
         settings = AssessmentSettings.model_validate(
             {"updater": name, "prior": prior, "tempering": tempering})
         runs = {}
-        for variant, changed in variants(trace, seed, permutations).items():
+        for variant, changed in changed_traces.items():
             manifest = RunManifest(analysis_id=f"replay-{trace.id}", mode=Mode.replay,
                                    config_hash="", updater=name)
             if provider == "openai" and remaining <= 0:
@@ -199,6 +216,7 @@ def run_all(trace: Trace, names: list[str], provider: str, seed: int, permutatio
     return {"trace": trace.id, "source": trace.source,
             "target": {"id": target.id, "hypothesis": target.hypothesis},
             "is_synthetic_example": trace.is_synthetic_example, "provider": provider,
+            "item_removed_or_corrected": picked,
             "seed": seed, "permutations": permutations, "commit": current_commit(),
             "prompts": prompts.VERSION, "scorer": strategies.SCORER_VERSION, "prior": prior,
             "tempering": tempering, "max_paid_calls": max_calls,

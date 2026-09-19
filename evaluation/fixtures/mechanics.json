@@ -144,10 +144,9 @@
     }
   ],
   "scripted_scores": {
-    "e1": 0.6931471805599453,
-    "e2": 1.791759469228055,
-    "e3": 1.791759469228055,
-    "e4": 1.0986122886681098
+    "grp-02dc50ff6e0b#contradicts#": 0.6931471805599453,
+    "grp-7badad5066e6#contradicts#": 1.791759469228055,
+    "grp-e6cec200f4d1#contradicts#": 1.0986122886681098
   },
   "source": "Synthetic factors 2, 6, and 3 with prior 0.20. They check arithmetic only.",
   "is_synthetic_example": true

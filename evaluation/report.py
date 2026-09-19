@@ -12,6 +12,8 @@ from pathlib import Path
 def _show(value) -> str:
     if value is None:
         return "unavailable"
+    if isinstance(value, bool):
+        return "yes" if value else "no"
     return f"{value:.4f}" if isinstance(value, float) else str(value)
 
 
@@ -23,7 +25,8 @@ def _replay(name: str, result: dict) -> list[str]:
              f"{result['prior']}, tempering {result['tempering']}, commit {result['commit']}, "
              f"{result['paid_calls_used']} of at most {result['max_paid_calls']} paid calls. "
              f"Scores are for the target {result['target']['id']}: "
-             f"{result['target']['hypothesis']}", "",
+             f"{result['target']['hypothesis']} The duplicate, withdrawal, and correction "
+             f"variants act on item {result['item_removed_or_corrected']}.", "",
              "| strategy | final status | raw score | order changes status | score range over "
              "orders | duplicate source | irrelevant addition | withdrawal | correction |",
              "|---|---|---|---|---|---|---|---|---|"]

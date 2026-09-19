@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from backend.config import env
 from backend.db import Store
+from evaluation.replay.scripted import context_key
 from backend.models import Calculation, Claim, EvidenceItem, InvestigationState, VerificationQuestion
 
 
@@ -40,7 +41,8 @@ class Trace(BaseModel):
     questions: list[VerificationQuestion] = []
     cutoff: datetime | None = None
     events: list[Event]
-    # Recorded log-evidence per evidence id. Only the scripted provider reads it.
+    # Recorded log-evidence per context key (see scripted.context_key). Only the scripted
+    # provider reads it.
     scripted_scores: dict[str, float] = {}
     source: str = ""
     is_synthetic_example: bool = False
@@ -60,10 +62,11 @@ def export_trace(store: Store, analysis_id: str, claim_id: str) -> Trace:
         events += [Event(kind="admit", evidence=e) for e in state.evidence if e.round == number]
         events += [Event(kind="calculate", calculation=c)
                    for c in state.calculations if c.round == number]
-    members = {g.id: g.member_ids for g in state.groups}
-    # A score may cover several groups joined by "+". Every member item gets the recorded value.
-    scores = {i: s.log_evidence for s in state.scores for g in s.group_id.split("+")
-              for i in members.get(g, [])}
+    scores = {}
+    for score in state.scores:
+        ids = set(score.group_id.split("+"))
+        scores[context_key([e for e in state.evidence if e.group_id in ids],
+                           [c for c in state.calculations if ids & set(c.lineage)])] = score.log_evidence
     return Trace(id=f"{analysis_id}-{claim_id}", claim=state.claim, questions=state.questions,
                  cutoff=state.target.cutoff if state.target else None, events=events,
                  scripted_scores=scores,

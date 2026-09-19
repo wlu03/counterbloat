@@ -21,6 +21,14 @@ def _status(evidence, calculations) -> EvidenceStatus:
     return EvidenceStatus.supported if in_favour else EvidenceStatus.insufficient
 
 
+def context_key(evidence, calculations) -> str:
+    """Names what a recorded score was given: the source groups, how their passages relate to the
+    claim, and the calculations."""
+    return "#".join("+".join(sorted(set(part))) for part in (
+        [e.group_id for e in evidence], [e.relationship for e in evidence],
+        [c.id for c in calculations]))
+
+
 class ScriptedLLM:
     def __init__(self, scores: dict[str, float]) -> None:
         self.scores = scores
@@ -36,8 +44,10 @@ class ScriptedLLM:
                             probability=None)
 
     def score_evidence(self, target, claim, evidence, calculations) -> EvidenceScoreDraft:
-        recorded = [self.scores[e.id] for e in evidence if e.id in self.scores]
-        if not recorded:
-            raise ProviderError("no recorded score for this group")
-        return EvidenceScoreDraft(log_evidence=recorded[0], short_basis="recorded in the trace",
+        # A recorded score applies to the groups and calculations it was made for and to nothing
+        # else. For any other context the provider abstains.
+        key = context_key(evidence, calculations)
+        if key not in self.scores:
+            raise ProviderError("no recorded score for this context")
+        return EvidenceScoreDraft(log_evidence=self.scores[key], short_basis="recorded in the trace",
                                   supporting_evidence_ids=[e.id for e in evidence])
