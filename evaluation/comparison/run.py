@@ -39,7 +39,7 @@ def load_cases(path: str | Path = CASES, only: list[str] | None = None) -> list[
     return [c for c in cases if not only or c.id in only]
 
 
-def _one(case: Case, repeat: int, call: Callable) -> dict:
+def _one(name: str, case: Case, repeat: int, call: Callable) -> dict:
     """Run one arm on one case and score it. A provider failure is recorded, not scored."""
     prepared = arms.Prepared(case)
     started = time.monotonic()
@@ -51,6 +51,8 @@ def _one(case: Case, repeat: int, call: Callable) -> dict:
     except ProviderError as exc:
         row["error"] = str(exc)
     row["seconds"] = round(time.monotonic() - started, 1)
+    # One line per finished case, because a full run takes many minutes.
+    print(name, case.id, row.get("status") or row["error"], f"{row['seconds']} s", flush=True)
     return row
 
 
@@ -75,7 +77,7 @@ def run(cases: list[Case], names: list[str], repeats: int, make_llm: Callable, s
                 continue
             call = (lambda p: arms.pipeline(p, factory, settings)) if name == "pipeline" \
                 else (lambda p: arms.chatgpt(p, factory))
-            row = _one(case, repeat, call)
+            row = _one(name, case, repeat, call)
             left -= sum(llm.calls for llm in made)
             if any(llm.refused for llm in made):
                 row["error"] = "not scored: a call was refused by the call budget"
@@ -85,7 +87,7 @@ def run(cases: list[Case], names: list[str], repeats: int, make_llm: Callable, s
         if env("DEVIN_API_KEY") and env("DEVIN_ORG_ID"):
             with ThreadPoolExecutor(devin_parallel) as pool:
                 rows = list(pool.map(lambda job: _one(
-                    job[0], job[1], lambda p: arms.devin(p, **(devin_options or {}))), jobs))
+                    "devin", job[0], job[1], lambda p: arms.devin(p, **(devin_options or {}))), jobs))
             result["devin"] = {"available": True, "rows": rows}
         else:
             result["devin"] = {"available": False, "rows": [],
