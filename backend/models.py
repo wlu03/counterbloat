@@ -200,6 +200,7 @@ class Calculation(BaseModel):
     # Provenance groups of the inputs. A calculation is not an independent observation.
     lineage: list[str] = []
     note: str = ""
+    round: int = 0  # the investigation round that produced it
     # The output that measures the quantity the claim states, and how it compares with the
     # claim's stated value. "none" means the calculation only answers a side question.
     claim_output: str | None = None
@@ -259,6 +260,7 @@ class InvestigationState(BaseModel):
     last_input_hash: str = ""  # input of the last committed update, used to skip repeats
     questions: list[VerificationQuestion] = []
     evidence: list[EvidenceItem] = []
+    withdrawn: list[EvidenceItem] = []  # kept for the history, never shown to an updater
     groups: list[EvidenceGroup] = []
     calculations: list[Calculation] = []
     assessment: Assessment = Field(default_factory=Assessment)

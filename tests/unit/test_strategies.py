@@ -7,8 +7,8 @@ from backend.belief import strategies
 from backend.config import AssessmentSettings
 from backend.evidence.provenance import merge, reconcile, withdraw
 from backend.models import (
-    AssertionType, Calculation, Claim, EvidenceItem, EvidenceScore, InvestigationState,
-    Relationship,
+    AssertionType, Calculation, Claim, EvidenceItem, EvidenceScore, InvestigationState, Mode,
+    Relationship, RunManifest,
 )
 from backend.providers.base import EvidenceScoreDraft, ProviderError
 from tests.fakes import FakeLLM
@@ -54,6 +54,10 @@ def test_numerical_mechanics_fixture():
     assert strategies.accumulate(state, settings).raw_probability == pytest.approx(1 / 3)
 
 
+def _manifest():
+    return RunManifest(analysis_id="t", mode=Mode.frozen, config_hash="")
+
+
 def test_a_score_for_an_older_group_version_is_not_used():
     settings = AssessmentSettings(updater="evidence_accumulator", prior=0.20)
     state = _state()
@@ -67,7 +71,7 @@ def test_a_score_for_an_older_group_version_is_not_used():
 
 
 def test_groups_are_scored_once_per_context_and_again_when_it_changes():
-    llm, failures = FakeLLM(), []
+    llm, failures = FakeLLM(), _manifest()
     state = _state()
     reconcile(state, [_item(1, "A."), _item(2, "B.")], {})
     strategies.score_groups(state, llm, failures)
@@ -89,11 +93,12 @@ def test_unavailable_and_invalid_scores_add_nothing():
             return EvidenceScoreDraft(log_evidence=float("inf"), supporting_evidence_ids=[],
                                       short_basis="")
 
-    state, failures = _state(), []
+    state, failures = _state(), _manifest()
     reconcile(state, [_item(1, "A."), _item(2, "B.")], {})
     strategies.score_groups(state, Broken(), failures)
     settings = AssessmentSettings(updater="evidence_accumulator", prior=0.3)
-    assert state.scores == [] and len(failures) == 2
+    assert state.scores == []
+    assert len(failures.errors) == 1 and len(failures.rejections) == 1
     assert strategies.accumulate(state, settings).raw_probability == pytest.approx(0.3)
 
 

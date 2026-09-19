@@ -2,7 +2,7 @@
 from fastapi.testclient import TestClient
 
 from backend.api.app import create_app
-from backend.config import Settings
+from backend.config import AssessmentSettings, Settings
 from backend.ingestion.snapshot import admit
 from backend.models import Mode, SourceSpan
 from backend.orchestration.worker import Deps, run_analysis
@@ -75,3 +75,24 @@ def test_a_failed_review_call_makes_the_job_partial(store):
     job = store.get("analyses", "an-1")
     assert job["status"] == "complete" and job["partial"] is True
     assert "503" in store.get("manifests", "an-1")["errors"][0]
+
+
+def test_internal_scores_are_served_only_by_the_research_view(store, monkeypatch):
+    monkeypatch.setenv("COUNTERCHECK_API_KEY", "k")
+    settings = Settings(mode=Mode.frozen, assessment=AssessmentSettings(updater="evidence_accumulator"))
+    client = TestClient(create_app(Deps(store=store, index=MemoryIndex(), settings=settings,
+                                        llm_factory=FakeLLM)))
+    document = client.post("/documents", json={"content": REPORT.decode()}, headers=HEADERS).json()
+    job = client.post("/analyses", json={"document_id": document["id"]}, headers=HEADERS).json()
+    [finding] = client.get(f"/analyses/{job['id']}/findings", headers=HEADERS).json()
+    claim = finding["claim_id"]
+    assert finding["probability"] is None
+    [update] = client.get(f"/claims/{claim}/updates", headers=HEADERS).json()
+    assert not {"belief", "new_score", "previous_score"} & set(update)
+    assert client.get(f"/claims/{claim}/research", headers=HEADERS).status_code == 404
+    monkeypatch.setenv("COUNTERCHECK_RESEARCH_VIEW", "1")
+    research = client.get(f"/claims/{claim}/research", headers=HEADERS).json()
+    assert research["target"]["id"] == "material-overstatement-v1"
+    assert research["belief"]["calibration_status"] == "uncalibrated"
+    assert research["updates"][0]["new_score"] == research["belief"]["raw_probability"]
+    assert "not a probability" in research["notice"].lower()

@@ -13,7 +13,7 @@ from backend.db import Store
 from backend.ingestion.fetch import BlockedDestination, FetchError
 from backend.ingestion.snapshot import admit, admit_url, normalized_text
 from backend.models import (
-    Calculation, Claim, DocumentSnapshot, EvidenceItem, Finding, InvestigationState, Mode,
+    BeliefUpdate, Calculation, Claim, DocumentSnapshot, EvidenceItem, Finding, InvestigationState, Mode,
     ReviewState, SourceSpan,
 )
 from backend.orchestration.worker import Deps, run_analysis
@@ -156,6 +156,8 @@ def create_app(deps: Deps | None = None) -> FastAPI:
         latest = states[-1] if states else None
         return {"claim": claim, "questions": latest.questions if latest else [],
                 "evidence": latest.evidence if latest else [],
+                "withdrawn": latest.withdrawn if latest else [],
+                "groups": latest.groups if latest else [],
                 "coverage": coverage(latest.questions) if latest else 0.0,
                 "calculations": d.store.find("calculations", Calculation, claim_id=claim_id),
                 "stop_reason": latest.stop_reason if latest else None}
@@ -169,7 +171,30 @@ def create_app(deps: Deps | None = None) -> FastAPI:
     @app.get("/claims/{claim_id}/updates", dependencies=guard)
     def read_updates(claim_id: str, d: Deps = Depends(get_deps)):
         found(d.store.get("claims", claim_id), "claim")
-        return sorted(d.store.find("updates", claim_id=claim_id), key=lambda u: u["version"])
+        # Experimental scores are left out here. They are served by the research view only.
+        internal = ("belief", "previous_score", "new_score")
+        updates = sorted(d.store.find("updates", claim_id=claim_id), key=lambda u: u["version"])
+        return [{k: v for k, v in u.items() if k not in internal} for u in updates]
+
+    @app.get("/claims/{claim_id}/research", dependencies=guard)
+    def read_research(claim_id: str, d: Deps = Depends(get_deps)):
+        """Internal scores for one claim. Off unless COUNTERCHECK_RESEARCH_VIEW is set."""
+        if not env("COUNTERCHECK_RESEARCH_VIEW"):
+            raise HTTPException(404, "research view is not enabled")
+        found(d.store.get("claims", claim_id), "claim")
+        states = d.store.find("states", InvestigationState, claim_id=claim_id)
+        latest = states[-1] if states else None
+        updates = sorted(d.store.find("updates", BeliefUpdate, claim_id=claim_id),
+                         key=lambda u: u.version)
+        return {"notice": "Experimental and uncalibrated. Not a probability that the claim is "
+                          "false, and not part of the finding.",
+                "target": latest.target if latest else None,
+                "belief": latest.belief if latest else None,
+                "updates": [{"version": u.version, "strategy": u.strategy,
+                             "input_state_hash": u.input_state_hash,
+                             "previous_score": u.previous_score, "new_score": u.new_score,
+                             "contributions": u.belief.contributions if u.belief else []}
+                            for u in updates]}
 
     @app.post("/findings/{finding_id}/review", dependencies=guard)
     def review_finding(finding_id: str, request: ReviewRequest, d: Deps = Depends(get_deps)):

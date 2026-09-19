@@ -9,7 +9,7 @@ from typing import Callable
 from backend.assessment.review import finalize, run_review
 from backend.belief.priority import choose, critical_open
 from backend.belief import strategies
-from backend.belief.state import apply_answers, apply_update
+from backend.belief.state import apply_answers
 from backend.claims.extract import extract
 from backend.compression.protect import build_context
 from backend.config import Settings
@@ -113,7 +113,7 @@ def _calculations(analysis: EvidenceAnalysis, state: InvestigationState,
             spans = [i.source_span_id for i in inputs]
             result = execute(calc_id, state.claim.id, inputs, program.steps, program.note,
                              lineage(state, spans))
-            result.claim_output = program.claim_output
+            result.claim_output, result.round = program.claim_output, state.round + 1
             result.claim_expected, result.claim_relation = claim_relation(
                 result.outputs, program.claim_output, program.claim_expected, state.claim.text)
             results.append(result)
@@ -184,26 +184,17 @@ def _rounds(analysis_id: str, state: InvestigationState, seen: dict[str, SourceS
             state.stop_reason = "no_new_evidence"
             break
         new_ids = [e.id for e in state.evidence if e.id not in known]
-        shown_hash = strategies.input_hash(state, settings.assessment.updater)
-        if shown_hash == state.last_input_hash:
-            # A retry with the same input must not produce a second update or a higher score.
-            state.stop_reason = "no_new_evidence"
-            break
-        previous_score = state.belief.raw_probability if state.belief else None
         try:
-            update, belief = strategies.run(state, new_ids, [c.id for c in calculations], llm,
-                                            settings.assessment, manifest.errors)
+            record = strategies.step(state, new_ids, [c.id for c in calculations], llm,
+                                     settings.assessment, manifest, prompts.VERSION)
         except ProviderError as exc:
             # The observations above stay recorded. No assessment transition is recorded.
             manifest.errors.append(str(exc))
             state.stop_reason = "provider_error"
             break
-        record = apply_update(state, update, new_ids, [c.id for c in calculations],
-                              prompts.VERSION)
-        state.belief, state.last_input_hash = belief, shown_hash
-        record.strategy, record.input_state_hash = settings.assessment.updater, shown_hash
-        record.belief, record.previous_score = belief, previous_score
-        record.new_score = belief.raw_probability if belief else None
+        if record is None:
+            state.stop_reason = "no_new_evidence"
+            break
         store.put("updates", record.id, record, claim_id=claim.id)
         store.put("states", f"{analysis_id}-{claim.id}", state, analysis_id=analysis_id,
                   claim_id=claim.id)

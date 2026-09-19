@@ -53,6 +53,7 @@ def withdraw(state: InvestigationState, evidence_id: str, reason: str = "withdra
     The group keeps a history entry. A calculation that read its inputs from a group that is no
     longer active is removed, because its inputs are no longer admitted.
     """
+    state.withdrawn += [e for e in state.evidence if e.id == evidence_id]
     state.evidence = [e for e in state.evidence if e.id != evidence_id]
     for group in state.groups:
         if evidence_id in group.member_ids:

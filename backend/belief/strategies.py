@@ -15,10 +15,11 @@ from datetime import datetime
 from math import isfinite
 
 from backend.belief.accumulator import EvidenceAccumulator, EvidenceContribution
+from backend.belief.state import apply_update
 from backend.config import AssessmentSettings
 from backend.models import (
-    Calculation, Claim, EvidenceItem, EvidenceScore, InvestigationState, NumericBelief,
-    ScoringTarget,
+    BeliefUpdate, Calculation, Claim, EvidenceItem, EvidenceScore, InvestigationState,
+    NumericBelief, RunManifest, ScoringTarget,
 )
 from backend.providers.base import LLM, ProviderError, StateUpdate
 
@@ -81,7 +82,7 @@ def accumulate(state: InvestigationState, settings: AssessmentSettings) -> Numer
         raw_logit=ledger.raw_logit(), raw_probability=ledger.raw_probability(), contributions=used)
 
 
-def score_groups(state: InvestigationState, llm: LLM, failures: list[str]) -> None:
+def score_groups(state: InvestigationState, llm: LLM, manifest: RunManifest) -> None:
     """Score each active group once per conditioning context. A failed score adds nothing."""
     kept: list[EvidenceScore] = []
     for group in (g for g in state.groups if g.active):
@@ -97,11 +98,12 @@ def score_groups(state: InvestigationState, llm: LLM, failures: list[str]) -> No
         try:
             draft = llm.score_evidence(state.target, state.claim, members, related)
         except ProviderError as exc:
-            failures.append(f"evidence score unavailable for {group.id}: {exc}")
+            manifest.errors.append(f"evidence score unavailable for {group.id}: {exc}")
             continue
         if not isfinite(draft.log_evidence) or abs(draft.log_evidence) > MAX_LOG_EVIDENCE:
             # An unusable score is an abstention. It is not treated as zero or as evidence.
-            failures.append(f"evidence score rejected for {group.id}: {draft.log_evidence}")
+            manifest.rejections.append(
+                f"evidence score rejected for {group.id}: {draft.log_evidence}")
             continue
         member_ids = {e.id for e in members}
         kept.append(EvidenceScore(
@@ -114,7 +116,7 @@ def score_groups(state: InvestigationState, llm: LLM, failures: list[str]) -> No
 
 def run(state: InvestigationState, new_evidence_ids: list[str], new_calculation_ids: list[str],
         llm: LLM, settings: AssessmentSettings,
-        failures: list[str]) -> tuple[StateUpdate, NumericBelief | None]:
+        manifest: RunManifest) -> tuple[StateUpdate, NumericBelief | None]:
     """Apply the configured strategy to a state that already holds the round's observations."""
     if settings.updater == "full_context":
         # One representative per provenance group, and no earlier verdict or score.
@@ -130,5 +132,26 @@ def run(state: InvestigationState, new_evidence_ids: list[str], new_calculation_
     update = llm.update_state(state, new_evidence_ids, new_calculation_ids)
     if settings.updater == "linguistic":
         return update, None
-    score_groups(state, llm, failures)
+    score_groups(state, llm, manifest)
     return update, accumulate(state, settings)
+
+
+def step(state: InvestigationState, new_evidence_ids: list[str], new_calculation_ids: list[str],
+         llm: LLM, settings: AssessmentSettings, manifest: RunManifest,
+         model_version: str) -> BeliefUpdate | None:
+    """Run the strategy once and commit the result. The worker and the replay both call this.
+
+    Return None when the state holds nothing the last committed update did not already see, so a
+    retry cannot record a second update or move a score. A ProviderError leaves the state as it was.
+    """
+    shown = input_hash(state, settings.updater)
+    if shown == state.last_input_hash:
+        return None
+    previous = state.belief.raw_probability if state.belief else None
+    update, belief = run(state, new_evidence_ids, new_calculation_ids, llm, settings, manifest)
+    record = apply_update(state, update, new_evidence_ids, new_calculation_ids, model_version)
+    state.belief, state.last_input_hash = belief, shown
+    record.strategy, record.input_state_hash = settings.updater, shown
+    record.belief, record.previous_score = belief, previous
+    record.new_score = belief.raw_probability if belief else None
+    return record
