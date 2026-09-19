@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from backend.models import (
     AnswerStatus, Assessment, BeliefUpdate, Calculation, EvidenceStatus, InvestigationState,
+    Relationship,
 )
 from backend.providers.base import QuestionAnswer, StateUpdate
 
@@ -13,7 +14,7 @@ def apply_answers(state: InvestigationState, answers: list[QuestionAnswer]) -> N
     for answer in answers:
         question = questions.get(answer.question_id)
         evidence_ids = [by_span[s] for s in answer.evidence_span_ids if s in by_span]
-        # An answer with no admitted evidence behind it does not close a question.
+        # An answer that cites no admitted evidence does not mark its question as answered.
         if question is None or (answer.status == AnswerStatus.answered and not evidence_ids):
             continue
         question.status, question.answer, question.evidence_ids = \
@@ -25,8 +26,13 @@ def apply_update(state: InvestigationState, update: StateUpdate, new_evidence_id
     previous = state.assessment.status
     state.calculations += calculations
     status, mechanisms = update.status, update.mechanisms
-    if not any(g.active for g in state.groups) and not state.calculations:
-        # A verdict needs admitted evidence. Without any, the claim is unresolved, not false.
+    backed = {e.relationship for e in state.evidence if e.comparable}
+    if (not any(g.active for g in state.groups) and not state.calculations) or (
+            status == EvidenceStatus.supported and Relationship.supports not in backed) or (
+            status == EvidenceStatus.contradicted and Relationship.contradicts not in backed
+            and not state.calculations):
+        # A verdict needs admitted, comparable evidence in its own direction. Without it the
+        # claim is unresolved, not false.
         status, mechanisms = EvidenceStatus.insufficient, []
     state.assessment = Assessment(status=status, mechanisms=mechanisms, summary=update.summary)
     state.unresolved = update.unresolved

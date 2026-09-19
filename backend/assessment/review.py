@@ -43,9 +43,10 @@ def rewrite_is_supported(rewrite: str, state: InvestigationState,
     allowed = _numbers(state.claim.text)
     for item in state.evidence:
         allowed |= _numbers(spans[item.span_id].text) if item.span_id in spans else set()
-    for calc in state.calculations:
-        allowed |= {abs(v).normalize() for v in calc.outputs.values()}
-    return all(any(n == a for a in allowed) for n in _numbers(rewrite))
+    outputs = [abs(v) for c in state.calculations for v in c.outputs.values()]
+    # A rewrite may state a calculated result rounded to the precision it is written with.
+    return all(n in allowed or any(abs(v - n) * 2 <= Decimal(1).scaleb(n.as_tuple().exponent)
+                                   for v in outputs) for n in _numbers(rewrite))
 
 
 def finalize(state: InvestigationState, spans: dict[str, SourceSpan], llm: LLM,
@@ -75,7 +76,9 @@ def finalize(state: InvestigationState, spans: dict[str, SourceSpan], llm: LLM,
         finding.evidence_status, finding.mechanisms = EvidenceStatus.insufficient, []
         finding.summary = "Review rejected the proposed conclusion: " + "; ".join(review.reasons)
         return finding
-    if review.decision == "narrow" and review.narrowed_status:
+    weaker = (EvidenceStatus.mixed, EvidenceStatus.insufficient, EvidenceStatus.not_yet_resolvable)
+    if review.decision == "narrow" and review.narrowed_status in weaker:
+        # A review can weaken a verdict. It cannot introduce supported or contradicted.
         finding.evidence_status = review.narrowed_status
     finding.summary = report.summary
     if report.supported_rewrite and rewrite_is_supported(report.supported_rewrite, state, spans):
