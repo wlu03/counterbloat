@@ -47,7 +47,7 @@ def extract(spans: list[SourceSpan], llm: LLM, router: Router | None, manifest: 
             continue
         for draft in drafts:
             if not valid(draft, span):
-                manifest.errors.append(f"rejected claim with unverifiable quote in {span.id}")
+                manifest.rejections.append(f"claim quote not found in passage {span.id}")
                 continue
             start = span.start + span.text.index(draft.quote)
             claims.append(Claim(

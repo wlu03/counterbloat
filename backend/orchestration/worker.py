@@ -24,7 +24,6 @@ from backend.providers import prompts
 from backend.providers.base import LLM, Compressor, EvidenceAnalysis, ProviderError, Router
 from backend.retrieval.discovery import discover
 from backend.retrieval.search import SearchIndex, retrieve
-from backend.verification.comparability import FIELDS, differences
 from backend.verification.numeric import CalculationError, execute, parse_number, value_in_source
 
 
@@ -45,20 +44,19 @@ def _cancelled(store: Store, analysis_id: str) -> bool:
 def _items(analysis: EvidenceAnalysis, state: InvestigationState, shown: dict[str, SourceSpan],
            manifest: RunManifest) -> tuple[list[EvidenceItem], dict[str, str]]:
     claim = state.claim
-    claim_fields = claim.model_dump(include=set(FIELDS))
     items, repeats = [], {}
     known = {(e.span_id, e.target) for e in state.evidence}
     for judgment in analysis.judgments:
         span = shown.get(judgment.span_id)
         if span is None or not judgment.quote.strip() or judgment.quote not in span.text:
-            manifest.errors.append(f"rejected evidence with unverifiable quote: {judgment.span_id}")
+            manifest.rejections.append(f"evidence quote not found in passage {judgment.span_id}")
             continue
         if span.id == claim.span_id and (judgment.quote in claim.text or claim.text in judgment.quote):
             continue  # the claim's own sentence is not evidence for the claim
         if (span.id, judgment.target) in known:
             continue  # already recorded, so every item built here is new and ids stay unique
         known.add((span.id, judgment.target))
-        found = differences(claim_fields, judgment.model_dump(include=set(FIELDS)))
+        found = list(judgment.differs_on)
         relationship, limitations = judgment.relationship, list(judgment.limitations)
         if found and relationship == Relationship.contradicts:
             # Evidence measured on another basis qualifies the claim. It does not contradict it.
@@ -93,7 +91,7 @@ def _calculations(analysis: EvidenceAnalysis, state: InvestigationState,
             results.append(execute(calc_id, state.claim.id, inputs, program.steps, program.note,
                                    lineage(state, spans)))
         except (CalculationError, ValueError) as exc:
-            manifest.errors.append(f"calculation rejected: {exc}")
+            manifest.rejections.append(f"calculation rejected: {exc}")
     return results
 
 

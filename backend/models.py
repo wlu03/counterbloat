@@ -178,9 +178,9 @@ class CalcInput(BaseModel):
 
 
 class CalcStep(BaseModel):
-    op: str
-    args: list[str]
-    out: str
+    op: str = Field(description="add, subtract, multiply, divide, pct_change, reduction, compare, or sum")
+    args: list[str] = Field(description="Names of inputs or of earlier steps' out. Never numbers.")
+    out: str = Field(description="Short name for this step's result, such as e24")
 
 
 class Calculation(BaseModel):
@@ -273,4 +273,7 @@ class RunManifest(BaseModel):
     models: dict[str, str] = {}
     cutoff: datetime | None = None
     calls: list[ProviderCall] = []
+    # Operational failures: a provider call, a fetch, or the job itself.
     errors: list[str] = []
+    # Model output that failed validation and was discarded. The job still ran in full.
+    rejections: list[str] = []

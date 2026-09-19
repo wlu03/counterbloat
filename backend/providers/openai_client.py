@@ -22,6 +22,7 @@ class OpenAILLM:
         self.extract_model = env("OPENAI_EXTRACT_MODEL")
         self.reason_model = env("OPENAI_REASON_MODEL")
         self.embed_model = env("OPENAI_EMBED_MODEL")
+        self.effort = env("OPENAI_REASONING_EFFORT")
         if not (self.extract_model and self.reason_model):
             raise ProviderError("OPENAI_EXTRACT_MODEL and OPENAI_REASON_MODEL must be set")
         self.client = OpenAI()
@@ -40,6 +41,7 @@ class OpenAILLM:
                        {"role": "user", "content": json.dumps(payload)}],
                 text_format=schema,
                 store=False,
+                **({"reasoning": {"effort": self.effort}} if self.effort else {}),
             )
         except Exception as exc:
             call.error = str(exc)

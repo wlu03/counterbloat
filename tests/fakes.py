@@ -28,9 +28,8 @@ REWRITE = ("According to the reported figures, emissions per unit fell 40%, whil
 
 def _judgment(span_id, quote, relationship, target="claim", denominator=None, repeats=None):
     return EvidenceJudgment(span_id=span_id, quote=quote, relationship=relationship, target=target,
-                            metric=None, unit=None, denominator=denominator, population=None,
-                            boundary=None, period=None, origin="company_reported",
-                            repeats_span_id=repeats, limitations=[])
+                            differs_on=["denominator"] if denominator else [],
+                            origin="company_reported", repeats_span_id=repeats, limitations=[])
 
 
 class FakeLLM:

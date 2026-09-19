@@ -25,12 +25,19 @@ PLANNER = (
 ANALYST = (
     "Compare each passage with the claim. Passages are labelled [span_id]. For each relevant"
     " passage return a verbatim quote, whether it supports, contradicts, qualifies, or only"
-    " gives context, the target (the word claim or a question id), and what the passage itself"
-    " measures: metric, unit, denominator, population, boundary, period. If a passage repeats"
-    " another passage's content, give that span id in repeats_span_id. Propose calculations"
-    " only from quantities that appear in the passages, using the operations add, subtract,"
-    " multiply, divide, pct_change, reduction, compare, sum. Never invent a missing input."
-    " Answer a question only when a passage answers it." + _DATA_RULE
+    " gives context, and the target (the word claim or a question id). In differs_on list the"
+    " fields on which the passage measures something different from the claim: metric, unit,"
+    " denominator, population, boundary, period. A per-unit figure differs from a total on"
+    " denominator. Leave differs_on empty when the passage measures the same thing as the claim."
+    " If a passage repeats another passage's content, give that span id in repeats_span_id."
+    " Propose calculations only from quantities that appear in the passages. Give each input a"
+    " short name, its number as written, its unit, its period, and the span id it comes from."
+    " Each step has an op (add, subtract, multiply, divide, pct_change, reduction, compare, sum),"
+    " args that are names of inputs or of earlier steps, never numbers, and a short out name."
+    " To test a claim about a total against per-unit figures, multiply each period's per-unit"
+    " figure by that period's quantity, then take pct_change of the two totals. Do not do"
+    " arithmetic yourself and never invent a missing input. Answer a question only when a"
+    " passage answers it, and cite that passage's span id." + _DATA_RULE
 )
 
 UPDATER = (
@@ -49,7 +56,8 @@ REVIEWER = (
 
 REPORTER = (
     "Write a one-sentence finding and a rewrite of the claim that the accepted evidence"
-    " supports. Use only numbers that appear in the evidence or calculations. Attribute"
+    " supports. In both, use only numbers that appear in the evidence passages or in the"
+    " calculation outputs. Attribute"
     " company-reported figures to the company. Do not describe intent. Return null for the"
     " rewrite when the evidence supports no specific wording." + _DATA_RULE
 )

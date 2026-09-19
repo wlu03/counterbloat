@@ -52,21 +52,16 @@ class EvidenceJudgment(BaseModel):
     quote: str
     relationship: Relationship
     target: str  # "claim" or a question id
-    # What the passage itself measures. Code compares these fields with the claim.
-    metric: str | None
-    unit: str | None
-    denominator: str | None
-    population: str | None
-    boundary: str | None
-    period: str | None
+    # Fields on which the passage measures something different from the claim.
+    differs_on: list[Literal["metric", "unit", "denominator", "population", "boundary", "period"]]
     origin: EvidenceOrigin
     repeats_span_id: str | None
     limitations: list[str]
 
 
 class InputDraft(BaseModel):
-    name: str
-    value: str
+    name: str  # short name that steps refer to, such as i24
+    value: str  # the number as written in the passage
     unit: str
     period: str | None
     population: str | None

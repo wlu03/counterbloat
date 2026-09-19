@@ -3,7 +3,6 @@ from decimal import Decimal
 import pytest
 
 from backend.models import CalcInput, CalcStep, SourceSpan
-from backend.verification.comparability import differences
 from backend.verification.numeric import CalculationError, execute, value_in_source
 
 
@@ -44,10 +43,3 @@ def test_input_must_appear_in_its_source():
                       text="Units produced | 2024: 1,000 | 2025: 2,000")
     assert value_in_source(Decimal(1000), span)
     assert not value_in_source(Decimal(1500), span)
-
-
-def test_per_unit_evidence_differs_from_a_total_claim():
-    claim = {"metric": "operational emissions", "period": "2025 vs 2024"}
-    evidence = {"metric": "operational emissions", "denominator": "unit", "period": "2025 vs 2024"}
-    assert differences(claim, evidence) == ["denominator"]
-    assert differences(claim, {"metric": "operational emissions"}) == []

@@ -131,7 +131,8 @@ def create_app(deps: Deps | None = None) -> FastAPI:
     def read_analysis(analysis_id: str, d: Deps = Depends(get_deps)):
         job = found(d.store.get("analyses", analysis_id), "analysis")
         manifest = d.store.get("manifests", analysis_id) or {}
-        return {**job, "errors": manifest.get("errors", [])}
+        return {**job, "errors": manifest.get("errors", []),
+                "rejections": manifest.get("rejections", [])}
 
     @app.get("/analyses/{analysis_id}/findings", dependencies=guard)
     def read_findings(analysis_id: str, d: Deps = Depends(get_deps)):
