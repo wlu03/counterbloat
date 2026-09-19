@@ -11,15 +11,15 @@ EXCLUDE_CONFIDENCE = 0.8
 CANDIDATE_KINDS = ("paragraph", "heading", "caption")
 
 
-def _digits(text: str) -> str:
-    return re.sub(r"[^\d.]", "", text)
+def _numbers(text: str) -> set[str]:
+    return {n.replace(",", "").rstrip(".") for n in re.findall(r"\d[\d,]*\.?\d*", text)}
 
 
 def valid(draft: ClaimDraft, span: SourceSpan) -> bool:
-    """The quote must be verbatim, and a stated value or unit must appear inside it."""
+    """The quote must be verbatim, and every number in a stated value must be a number in it."""
     if not draft.quote or draft.quote not in span.text:
         return False
-    if draft.value and _digits(draft.value) and _digits(draft.value) not in _digits(draft.quote):
+    if draft.value and not _numbers(draft.value) <= _numbers(draft.quote):
         return False
     return True
 
