@@ -52,8 +52,7 @@ def reconcile(state: InvestigationState, items: list[EvidenceItem],
             item.origin = EvidenceOrigin.third_party_repetition
         else:
             group_id = by_text.get(_family_key(item.quote), _family_key(item.quote))
-            if group_id in groups:
-                group_id = _current(state, group_id)  # follow an earlier merge
+            group_id = _current(groups, group_id)  # follow an earlier merge
         item.group_id = group_id
         by_text.setdefault(_family_key(item.quote), group_id)
         group = groups.setdefault(group_id, EvidenceGroup(id=group_id, member_ids=[]))
@@ -80,16 +79,16 @@ def reconcile(state: InvestigationState, items: list[EvidenceItem],
     homes: dict[str, str] = {}
     for item in sorted(state.evidence, key=lambda i: i.repeats_span_id is None):
         if item.group_id:
-            home = _current(state, homes.setdefault(_family_key(item.quote), item.group_id))
+            home = _current({g.id: g for g in state.groups},
+                            homes.setdefault(_family_key(item.quote), item.group_id))
             if home != item.group_id:
                 merge(state, home, item.group_id)
     return evidence_hash(state.groups) != before
 
 
-def _current(state: InvestigationState, group_id: str) -> str:
+def _current(groups: dict[str, EvidenceGroup], group_id: str) -> str:
     """The group that holds the members of `group_id` now, after any merges."""
-    groups = {g.id: g for g in state.groups}
-    while (target := groups[group_id].merged_into) is not None:
+    while group_id in groups and (target := groups[group_id].merged_into) is not None:
         group_id = target
     return group_id
 

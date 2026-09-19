@@ -86,7 +86,12 @@ def run(cases: list[Case], names: list[str], repeats: int, make_llm: Callable, s
         reuse: dict | None = None) -> dict:
     """`reuse` is an earlier result. Arms that are not run now are taken from it and rescored."""
     left = max_calls
-    result: dict = {name: {**arm, "rows": rescore(arm["rows"], cases)}
+    now = {"commit": current_commit(), "updater": settings.assessment.updater,
+           "models": {"extract": env("OPENAI_EXTRACT_MODEL"), "reason": env("OPENAI_REASON_MODEL"),
+                      "effort": env("OPENAI_REASONING_EFFORT")}}
+    # A reused arm keeps the commit and models it was run with.
+    earlier = {k: (reuse or {}).get(k) for k in now}
+    result: dict = {name: {**earlier, **arm, "rows": rescore(arm["rows"], cases)}
                     for name, arm in ((reuse or {}).get("arms") or {}).items()
                     if name not in names and arm.get("available")}
     jobs = [(case, repeat) for case in cases for repeat in range(repeats)]
@@ -111,13 +116,13 @@ def run(cases: list[Case], names: list[str], repeats: int, make_llm: Callable, s
             if any(llm.refused for llm in made):
                 row["error"] = "not scored: a call was refused by the call budget"
             rows.append(row)
-        result[name] = {"available": True, "rows": rows}
+        result[name] = {"available": True, "rows": rows, **now}
     if "devin" in names:
         if env("DEVIN_API_KEY") and env("DEVIN_ORG_ID"):
             with ThreadPoolExecutor(devin_parallel) as pool:
                 rows = list(pool.map(lambda job: _one(
                     "devin", job[0], job[1], lambda p: arms.devin(p, **(devin_options or {}))), jobs))
-            result["devin"] = {"available": True, "rows": rows}
+            result["devin"] = {"available": True, "rows": rows, "commit": now["commit"]}
         else:
             result["devin"] = {"available": False, "rows": [],
                                "reason": "DEVIN_API_KEY and DEVIN_ORG_ID must both be set"}
@@ -126,10 +131,8 @@ def run(cases: list[Case], names: list[str], repeats: int, make_llm: Callable, s
         arm["status_correct_by_category"] = {
             category: summarise([r for r in arm["rows"] if r["category"] == category])["status_correct"]
             for category in sorted({c.category for c in cases})}
-    return {"commit": current_commit(), "prompt_sha256": hashlib.sha256(PROMPT.encode()).hexdigest()[:16],
-            "models": {"extract": env("OPENAI_EXTRACT_MODEL"), "reason": env("OPENAI_REASON_MODEL"),
-                       "effort": env("OPENAI_REASONING_EFFORT")},
-            "updater": settings.assessment.updater, "repeats": repeats,
+    return {"scored_at_commit": now["commit"],
+            "prompt_sha256": hashlib.sha256(PROMPT.encode()).hexdigest()[:16], "repeats": repeats,
             "openai_calls_used": max_calls - left, "max_calls": max_calls,
             "cases": {c.id: {"category": c.category, "accept": c.expected.accept_statuses}
                       for c in cases},
@@ -145,13 +148,18 @@ def _cell(value) -> str:
 def markdown(result: dict) -> str:
     names = list(result["arms"])
     lines = ["# Comparison: structured pipeline and single-prompt systems", "",
-             f"Commit {result['commit']}. {len(result['cases'])} synthetic cases, "
-             f"{result['repeats']} run(s) per case. OpenAI models: {result['models']}. "
-             f"Pipeline updater: {result['updater']}. Every arm read the same parsed passages. "
-             "The scorer is code. A rate leaves out the cases in which an arm did not run.", ""]
+             f"{len(result['cases'])} synthetic cases, {result['repeats']} run(s) per case, scored "
+             f"at commit {result['scored_at_commit']}. Every arm read the same parsed passages. "
+             "The scorer is code. A rate leaves out the cases in which an arm could not be run.", ""]
     for name, arm in result["arms"].items():
         if not arm["available"]:
             lines += [f"The {name} arm did not run: {arm['reason']}.", ""]
+        else:
+            models = arm.get("models")
+            lines += [f"The {name} arm ran at commit {arm.get('commit')}"
+                      + (f" with OpenAI models {models}" if models and name != "devin" else "")
+                      + (f" and the {arm.get('updater')} updater" if name == "pipeline" else "")
+                      + ".", ""]
     rows = [("cases run", "cases_run"), ("cases that could not be run", "cases_failed"),
             ("runs that gave no usable answer (scored as misses)", "no_answer"),
             ("runs with a failed provider call (scored as returned)", "partial_runs"),

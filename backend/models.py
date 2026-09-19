@@ -187,7 +187,8 @@ class CalcInput(BaseModel):
 
 
 class CalcStep(BaseModel):
-    op: str = Field(description="add, subtract, multiply, divide, pct_change, reduction, compare, or sum")
+    op: str = Field(description="add, subtract, multiply, divide, pct_change, reduction, share, "
+                                "compare, or sum")
     args: list[str] = Field(description="Names of inputs or of earlier steps' out. Never numbers.")
     out: str = Field(description="Short name for this step's result, such as e24")
 

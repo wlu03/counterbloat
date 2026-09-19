@@ -93,7 +93,11 @@ def pipeline(prepared: Prepared, llm_factory: Callable, settings: Settings) -> t
             evidence=[AuditQuote(document_id=e.document_id, quote=e.quote) for e in state.evidence],
             computed=[AuditNumber(name=name, value=str(value), unit=c.units.get(name, ""))
                       for c in state.calculations for name, value in c.outputs.items()]))
-    return AuditOutput(findings=findings), _usage(manifest)
+    usage = _usage(manifest)
+    usage["rejections"] = manifest.rejections
+    usage["limitations"] = [l for f in store.find("findings", Finding, analysis_id="run")
+                            for l in f.uncertainty.measurement_limitations]
+    return AuditOutput(findings=findings), usage
 
 
 def chatgpt(prepared: Prepared, llm_factory: Callable) -> tuple[AuditOutput, dict]:

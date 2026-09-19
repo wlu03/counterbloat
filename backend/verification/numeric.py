@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation
 
 from backend.models import CalcInput, CalcStep, Calculation, SourceSpan
 
-SAME_UNIT_OPS = {"add", "subtract", "sum", "compare", "pct_change", "reduction"}
+SAME_UNIT_OPS = {"add", "subtract", "sum", "compare", "pct_change", "reduction", "share"}
 OPS = SAME_UNIT_OPS | {"multiply", "divide"}
 
 
@@ -97,7 +97,8 @@ def execute(calc_id: str, claim_id: str, inputs: list[CalcInput], steps: list[Ca
                 raise CalculationError(f"incompatible units in {step.op}: "
                                        f"{[units[a] for a in step.args]}")
             scopes = {scope[a] for a in step.args if a in scope and any(scope[a])}
-            if len(scopes) > 1:
+            # A share compares a part with its whole, so its two populations differ by design.
+            if len(scopes) > 1 and step.op != "share":
                 raise CalculationError(f"different population or boundary in {step.op}")
         x0, x1 = args[0], args[1]
         shared = {periods.get(a) for a in step.args}
@@ -126,6 +127,10 @@ def execute(calc_id: str, claim_id: str, inputs: list[CalcInput], steps: list[Ca
             if x0 == 0:
                 raise CalculationError("percentage change from zero")
             result, unit = (x1 - x0) / x0 * 100, "%"
+        elif step.op == "share":
+            if x1 == 0:
+                raise CalculationError("share of a zero whole")
+            result, unit = x0 / x1 * 100, "%"  # the first value as a percentage of the second
         elif step.op == "reduction":
             if x0 <= 0:
                 raise CalculationError("reduction needs a positive base")

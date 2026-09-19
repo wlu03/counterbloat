@@ -79,3 +79,23 @@ def test_an_opposite_sign_of_the_same_size_does_not_count_as_disagreement():
     assert claim_relation({"x": Decimal("-40")}, "x", "40", text) == (None, "none")
     assert claim_relation({"x": Decimal("40")}, "x", "-40", text) == (None, "none")
     assert claim_relation({"x": Decimal("20")}, "x", "-40", text)[1] == "disagrees"
+
+
+def test_share_gives_a_part_as_a_percentage_of_its_whole():
+    def value(name, number, population):
+        return CalcInput(name=name, value=Decimal(number), unit="managers", period="2024",
+                         population=population, source_span_id="s")
+
+    inputs = [value("women", "58", "women"), value("everyone", "200", "all managers")]
+    result = execute("n", "c", inputs, [CalcStep(op="share", args=["women", "everyone"], out="pct")])
+    assert result.outputs["pct"] == Decimal("29") and result.units["pct"] == "%"
+    margins = [CalcInput(name=n, value=Decimal(v), unit="EUR million", period=p, source_span_id="s")
+               for n, v, p in (("p24", "60", "2024"), ("r24", "600", "2024"),
+                               ("p25", "90", "2025"), ("r25", "720", "2025"))]
+    points = execute("n", "c", margins, [CalcStep(op="share", args=["p24", "r24"], out="m24"),
+                                         CalcStep(op="share", args=["p25", "r25"], out="m25"),
+                                         CalcStep(op="subtract", args=["m25", "m24"], out="change")])
+    assert points.outputs["change"] == Decimal("2.5") and points.units["change"] == "%"
+    with pytest.raises(CalculationError, match="zero whole"):
+        execute("n", "c", [value("a", "1", None), value("b", "0", None)],
+                [CalcStep(op="share", args=["a", "b"], out="x")])

@@ -190,3 +190,12 @@ def test_a_withdrawal_reopens_a_question_that_rested_on_the_item():
     assert state.questions[0].status == AnswerStatus.answered and state.questions[0].evidence_ids == ["e2"]
     withdraw(state, "e2")
     assert state.questions[0].status == AnswerStatus.open and state.questions[0].answer is None
+
+
+def test_one_quote_admitted_for_two_targets_in_one_round_shares_a_group():
+    state = _state()
+    for_claim = _item(1, "s1", "Output was 1,000 units.")
+    for_question = _item(2, "s1", "Output was 1,000 units.").model_copy(update={"target": "q1"})
+    assert reconcile(state, [for_claim, for_question], {})
+    [group] = state.groups
+    assert sorted(group.member_ids) == ["e1", "e2"]
