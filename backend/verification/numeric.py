@@ -8,6 +8,9 @@ from backend.models import CalcInput, CalcStep, Calculation, SourceSpan
 
 SAME_UNIT_OPS = {"add", "subtract", "sum", "compare", "pct_change", "reduction", "share"}
 OPS = SAME_UNIT_OPS | {"multiply", "divide"}
+# Operations that compare two values of one measure. Both values must cover the same population
+# and boundary. Adding parts to a total, or taking a part as a share of its whole, does not.
+SAME_SCOPE_OPS = {"compare", "pct_change", "reduction"}
 
 
 class CalculationError(Exception):
@@ -97,8 +100,7 @@ def execute(calc_id: str, claim_id: str, inputs: list[CalcInput], steps: list[Ca
                 raise CalculationError(f"incompatible units in {step.op}: "
                                        f"{[units[a] for a in step.args]}")
             scopes = {scope[a] for a in step.args if a in scope and any(scope[a])}
-            # A share compares a part with its whole, so its two populations differ by design.
-            if len(scopes) > 1 and step.op != "share":
+            if len(scopes) > 1 and step.op in SAME_SCOPE_OPS:
                 raise CalculationError(f"different population or boundary in {step.op}")
         x0, x1 = args[0], args[1]
         shared = {periods.get(a) for a in step.args}

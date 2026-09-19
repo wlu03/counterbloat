@@ -99,3 +99,18 @@ def test_share_gives_a_part_as_a_percentage_of_its_whole():
     with pytest.raises(CalculationError, match="zero whole"):
         execute("n", "c", [value("a", "1", None), value("b", "0", None)],
                 [CalcStep(op="share", args=["a", "b"], out="x")])
+
+
+def test_parts_with_different_populations_can_be_added_but_not_compared():
+    def value(name, number, period, population):
+        return CalcInput(name=name, value=Decimal(number), unit="injuries", period=period,
+                         population=population, source_span_id="s")
+
+    inputs = [value("east23", "50", "2023", "Eastmere"), value("west23", "40", "2023", "Corbank"),
+              value("east25", "30", "2025", "Eastmere"), value("west25", "42", "2025", "Corbank")]
+    total = execute("n", "c", inputs, [CalcStep(op="sum", args=["east23", "west23"], out="all23"),
+                                       CalcStep(op="sum", args=["east25", "west25"], out="all25"),
+                                       CalcStep(op="pct_change", args=["all23", "all25"], out="change")])
+    assert total.outputs["change"] == Decimal("-20")
+    with pytest.raises(CalculationError, match="different population"):
+        execute("n", "c", inputs, [CalcStep(op="pct_change", args=["east23", "west25"], out="x")])
