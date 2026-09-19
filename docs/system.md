@@ -9,7 +9,7 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
 | 6.3–6.4 Routing and extraction | `backend/claims/extract.py`, `backend/providers/jev.py` |
 | 6.5 Verification questions | `backend/planning/checklists.py` |
 | 7.1–7.2 Retrieval and discovery | `backend/retrieval/` |
-| 7.3–7.4 Evidence relationships and provenance | `backend/evidence/`, `backend/verification/comparability.py` |
+| 7.3–7.4 Evidence relationships and provenance | `backend/evidence/`; the analyst names the fields on which a passage differs from the claim, and `backend/orchestration/worker.py` acts on that |
 | 7.5–7.6 Investigation state and stopping | `backend/orchestration/worker.py`, `backend/belief/priority.py` |
 | 8 Protected compression | `backend/compression/protect.py`, `backend/providers/ttc.py` |
 | 9.1 Restricted calculations | `backend/verification/numeric.py` |
@@ -32,6 +32,11 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
 - A verdict needs admitted, comparable evidence in its own direction, or a calculation for a
   contradiction. Otherwise it becomes `insufficient`. A review can weaken a verdict but not strengthen it.
 - The claim's own sentence is not accepted as evidence for the claim.
+- The finding summary and the supported rewrite may use only numbers found in the claim, the
+  evidence passages, or the calculation outputs. Otherwise the summary is replaced by a fixed
+  sentence and the rewrite is dropped.
+- Model output that fails validation is listed under `rejections` in the run manifest. It does
+  not make a job partial. Operational failures are listed under `errors` and do.
 - A failed OpenAI, Jev, or Token Company call during an analysis is recorded in the run manifest
   and never changes an assessment. A failed embedding call is not recorded; search then uses
   keywords only.
