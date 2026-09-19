@@ -162,6 +162,53 @@ repository's parser, the prompt for the other two arms was written here, and the
 rules (exact quotes, the number rule) match what the scorer checks. A result on these cases says
 how the systems behave on this kind of input. It is not a measurement on real disclosures.
 
+### Results so far (2026-09-19)
+
+One run per case, models `gpt-5.6-luna` (extraction) and `gpt-5.6-sol` (reasoning) at low
+reasoning effort, pipeline updater `linguistic`. The Devin arm has not run: `DEVIN_ORG_ID` is not
+set. The result files are in `results/`, which git ignores.
+
+| | single OpenAI prompt | pipeline, first run | pipeline, second run | pipeline, third run |
+|---|---|---|---|---|
+| commit | 4e87684 | 4bcc994 | 6762656 | abbdd24 |
+| status correct | 15 of 15 | 8 of 15 | 9 of 15 | 14 of 15 |
+| key numbers calculated | 9 of 9 | not rescored | 4 of 9 | 8 of 9 |
+| exact quotes | all | all | all | all |
+| findings with no quote | 2 | 0 | 0 | 0 |
+| findings other than the case's claim | 47 | 2 | 3 | 5 |
+| OpenAI calls | 15 | 144 | 175 | 193 |
+| tokens in / out | 22,620 / 17,672 | 410,233 / 98,331 | 476,943 / 119,130 | 552,829 / 126,677 |
+| seconds | 200 | 1,676 | 1,648 | 1,863 |
+
+What the three pipeline runs showed:
+
+- First run: the job failed on three cases with `KeyError` in the group lookup. One quote
+  admitted for two targets in one round was not handled. The defect came in with commit
+  `37e01bf`, and no test covered that path. In the table those three cases count as wrong.
+- Second run: five cases ended `insufficient` because the calculator rejected a sum of parts
+  with different populations, such as plants or regions added to a company total. The calculator
+  also had no operation for a percentage share. Both are fixed, with tests.
+- Third run: one case is wrong. The updater proposed `mixed`, the review objected that the
+  evidence supports the claim as worded, and a review rejection can only produce
+  `insufficient`. A correct objection by the review therefore gave a wrong status. This is a
+  limit of the design, not of these cases, and it is not changed here.
+
+How to read this:
+
+- On these cases the single prompt is as accurate as the pipeline or more accurate, at about
+  one thirteenth of the calls and one ninth of the time. These cases supply every document and
+  need at most a few steps of arithmetic. They do not test retrieval from a large corpus, long
+  documents, evidence that changes over time, or repeated runs.
+- The single prompt returned 47 findings about sentences other than the case's claim, which are
+  background facts it was told to skip, and 2 findings with no quote. The pipeline returned 5 and
+  0. Nothing in the prompt arm checks a quote or a number in code: on these cases the model
+  complied, and nothing would have stopped it if it had not.
+- After the first run, the pipeline was changed in response to failures on these cases. The 15
+  cases are therefore development data for the pipeline and no longer a held-out test. The
+  single-prompt arm was run once and not changed.
+- One run per case does not measure run-to-run variation. The pipeline gave `mixed` and then
+  `insufficient` for the same case in two runs. Use `--repeats 3` for that measure.
+
 ## Report
 
     uv run python -m evaluation.report results --out results/report.md

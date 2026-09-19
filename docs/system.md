@@ -86,6 +86,9 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
   refuses automated requests. Documents from a site that refuses the fetcher must be uploaded.
 - Text made block-level only by CSS is joined without a space. A claim that appears only in a
   table cell is not extracted, because table rows are evidence passages, not claim candidates.
+- A review rejection always produces `insufficient`. When the review objects that an assessment
+  is too weak, its objection cannot raise the status. The comparison in
+  `docs/evaluation_protocol.md` has one case that is wrong for this reason.
 - No result has been measured on any dataset. No dataset file is present in this repository.
   FinQA and FinanceBench are questions, not claims, so the verification runner does not take
   them. GreenClaims accusations are annotations, not adjudicated labels, so no metric is
