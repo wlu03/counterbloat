@@ -59,3 +59,14 @@ def test_a_change_computed_from_the_later_period_to_the_earlier_one_is_rejected(
         execute("n", "c", inputs, totals + [CalcStep(op="pct_change", args=["e25", "e24"], out="d")])
     with pytest.raises(CalculationError, match="later period first"):
         execute("n", "c", inputs, [CalcStep(op="reduction", args=["a25", "b24"], out="d")])
+
+
+def test_agreement_uses_the_precision_the_claim_is_written_with():
+    from backend.verification.numeric import claim_relation
+
+    outputs = {"x": Decimal("-39.6")}
+    text = "We reduced emissions by 40% in 2025."
+    for expected in ("-40", "-40.0", "-40.00"):
+        assert claim_relation(outputs, "x", expected, text)[1] == "agrees"
+    assert claim_relation(outputs, "x", "-40", "We reduced emissions by 40.0% in 2025.")[1] == "disagrees"
+    assert claim_relation(outputs, "x", "-35", text) == (None, "none")  # 35 is not in the claim

@@ -86,9 +86,15 @@ class OpenAILLM:
         return self._parse("analyze", self.reason_model, prompts.ANALYST, payload,
                            EvidenceAnalysis)
 
+    @staticmethod
+    def _shown(state: InvestigationState) -> dict:
+        # Withdrawn items and internal scores are not inputs to an assessment, review, or report.
+        return state.model_dump(mode="json", exclude={"withdrawn", "belief", "scores", "target",
+                                                      "last_input_hash"})
+
     def update_state(self, state: InvestigationState, new_evidence_ids: list[str],
                      new_calculation_ids: list[str]) -> StateUpdate:
-        payload = {"state": state.model_dump(mode="json"), "new_evidence_ids": new_evidence_ids,
+        payload = {"state": self._shown(state), "new_evidence_ids": new_evidence_ids,
                    "new_calculation_ids": new_calculation_ids}
         return self._parse("update", self.reason_model, prompts.UPDATER, payload, StateUpdate)
 
@@ -110,12 +116,12 @@ class OpenAILLM:
                            EvidenceScoreDraft)
 
     def review(self, state: InvestigationState, decisive: list[SourceSpan]) -> ReviewResult:
-        payload = {"state": state.model_dump(mode="json"),
+        payload = {"state": self._shown(state),
                    "original_passages": [{"id": s.id, "text": s.text} for s in decisive]}
         return self._parse("review", self.reason_model, prompts.REVIEWER, payload, ReviewResult)
 
     def report(self, state: InvestigationState, decisive: list[SourceSpan]) -> Report:
-        payload = {"state": state.model_dump(mode="json"),
+        payload = {"state": self._shown(state),
                    "original_passages": [{"id": s.id, "text": s.text} for s in decisive]}
         return self._parse("report", self.reason_model, prompts.REPORTER, payload, Report)
 

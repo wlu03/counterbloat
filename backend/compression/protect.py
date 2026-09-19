@@ -44,6 +44,9 @@ def build_context(decisive: list[str], background: list[str], compressor: Compre
     try:
         result = compressor.compress(marked + "\n\n" + _neutralize(background_text))
     except ProviderError as exc:
+        manifest.calls.append(ProviderCall(provider="ttc", purpose="compress", error=str(exc),
+                                           billing_unit="removed_tokens",
+                                           latency_ms=int((time.monotonic() - started) * 1000)))
         manifest.errors.append(str(exc))
         manifest.compression_fallbacks += 1
         return raw, False

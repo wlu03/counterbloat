@@ -7,7 +7,7 @@ import re
 from backend.models import EvidenceGroup, EvidenceItem, EvidenceOrigin, InvestigationState
 
 
-def family_key(quote: str) -> str:
+def _family_key(quote: str) -> str:
     normalized = re.sub(r"\W+", " ", quote.lower()).strip()
     return "grp-" + hashlib.sha256(normalized.encode()).hexdigest()[:12]
 
@@ -27,6 +27,8 @@ def reconcile(state: InvestigationState, items: list[EvidenceItem],
     before = evidence_hash(state.groups)
     groups = {g.id: g for g in state.groups}
     by_span = {e.span_id: e for e in state.evidence}
+    # An identical passage joins the group its twin is in, which may be a declared original's.
+    by_text = {_family_key(e.quote): e.group_id for e in state.evidence if e.group_id}
     known = {(e.span_id, e.target) for e in state.evidence}
     # Originals are processed before the passages that repeat them, whatever order they arrive in.
     for item in sorted(items, key=lambda i: i.span_id in repeats):
@@ -38,7 +40,8 @@ def reconcile(state: InvestigationState, items: list[EvidenceItem],
             item.group_id = original.group_id
             item.origin = EvidenceOrigin.third_party_repetition
         else:
-            item.group_id = family_key(item.quote)
+            item.group_id = by_text.get(_family_key(item.quote), _family_key(item.quote))
+        by_text.setdefault(_family_key(item.quote), item.group_id)
         group = groups.setdefault(item.group_id, EvidenceGroup(id=item.group_id, member_ids=[]))
         if not group.active:
             # A group emptied by a withdrawal is active again. Scores of its old version lapse.
@@ -63,11 +66,13 @@ def reconcile(state: InvestigationState, items: list[EvidenceItem],
 def withdraw(state: InvestigationState, evidence_id: str, reason: str = "withdrawn") -> None:
     """Remove an item from the active ledger and drop what depended on it.
 
-    The group keeps a history entry. A calculation that read its inputs from a group that is no
-    longer active is removed, because its inputs are no longer admitted.
+    The group keeps a history entry. A calculation is removed when a group it read from is no
+    longer active, or when it cites the withdrawn passage and no admitted item cites it any more.
     """
-    state.withdrawn += [e for e in state.evidence if e.id == evidence_id]
+    removed = [e for e in state.evidence if e.id == evidence_id]
+    state.withdrawn += removed
     state.evidence = [e for e in state.evidence if e.id != evidence_id]
+    uncited = {e.span_id for e in removed} - {e.span_id for e in state.evidence}
     for group in state.groups:
         if evidence_id in group.member_ids:
             group.member_ids.remove(evidence_id)
@@ -75,7 +80,8 @@ def withdraw(state: InvestigationState, evidence_id: str, reason: str = "withdra
             group.active = bool(group.member_ids)
             group.history.append(f"v{group.version}: {evidence_id} {reason}")
     active = {g.id for g in state.groups if g.active}
-    state.calculations = [c for c in state.calculations if set(c.lineage) <= active]
+    state.calculations = [c for c in state.calculations if set(c.lineage) <= active
+                          and not uncited & {i.source_span_id for i in c.inputs}]
 
 
 def merge(state: InvestigationState, keep_id: str, drop_id: str) -> None:

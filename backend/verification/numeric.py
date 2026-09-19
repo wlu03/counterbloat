@@ -63,10 +63,12 @@ def claim_relation(outputs: dict[str, Decimal], claim_output: str | None,
         expected = parse_number(claim_expected)
     except CalculationError:
         return None, "none"
-    stated = {abs(parse_number(n)) for n in re.findall(r"\d[\d,]*\.?\d*", claim_text)}
-    if abs(expected) not in stated:
+    written = [n for n in re.findall(r"\d[\d,]*\.?\d*", claim_text)
+               if abs(parse_number(n)) == abs(expected)]
+    if not written:
         return None, "none"
-    tolerance = Decimal(1).scaleb(expected.as_tuple().exponent) / 2
+    # The precision comes from the claim's own wording, not from how the model wrote the value.
+    tolerance = Decimal(1).scaleb(int(parse_number(written[0]).as_tuple().exponent)) / 2
     agrees = abs(outputs[claim_output] - expected) <= tolerance
     return expected, "agrees" if agrees else "disagrees"
 

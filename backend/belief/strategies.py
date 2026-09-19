@@ -138,7 +138,8 @@ def score_groups(state: InvestigationState, llm: LLM, manifest: RunManifest) -> 
             continue
         if not isfinite(draft.log_evidence) or abs(draft.log_evidence) > MAX_LOG_EVIDENCE:
             # An unusable score is an abstention. It is not treated as zero or as evidence.
-            manifest.rejections.append(f"evidence score rejected for {key}: {draft.log_evidence}")
+            manifest.rejections.append(
+                f"evidence score rejected for {key}: not finite or outside the limit")
             continue
         member_ids = {e.id for e in members}
         kept.append(EvidenceScore(
@@ -163,6 +164,8 @@ def run(state: InvestigationState, new_evidence_ids: list[str], new_calculation_
         belief = NumericBelief(target_id=_target(state).id, method="full_context",
                                raw_probability=p if p is not None and 0.0 < p < 1.0 else None)
         return StateUpdate(**result.model_dump(exclude={"probability"})), belief
+    if settings.updater not in ("linguistic", "evidence_accumulator"):
+        raise ValueError(f"unknown updater: {settings.updater}")
     update = llm.update_state(state, new_evidence_ids, new_calculation_ids)
     if settings.updater == "linguistic":
         return update, None

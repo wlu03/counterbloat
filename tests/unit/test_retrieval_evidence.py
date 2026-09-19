@@ -112,3 +112,33 @@ def test_a_passage_admitted_again_after_a_withdrawal_reactivates_its_group():
     assert reconcile(state, [_item(2, "s1", "Output doubled.")], {})
     [group] = state.groups
     assert group.active and group.version == 3 and [e.id for e in state.withdrawn] == ["e1"]
+
+
+def test_an_identical_copy_of_a_declared_repetition_joins_the_same_group():
+    state = _state()
+    reconcile(state, [_item(1, "s1", "Emissions per unit fell 40%."),
+                      _item(2, "s2", "The firm says intensity dropped two fifths")], {"s2": "s1"})
+    assert not reconcile(state, [_item(3, "s3", "The firm says intensity dropped two fifths")], {})
+    assert len([g for g in state.groups if g.active]) == 1
+
+
+def test_withdrawing_the_cited_passage_removes_the_calculation_even_if_a_repetition_remains():
+    from decimal import Decimal
+
+    from backend.models import CalcInput, Calculation
+
+    def build():
+        state = _state()
+        reconcile(state, [_item(1, "s1", "Output was 1,000 units."),
+                          _item(2, "s2", "An article repeats the output figure")], {"s2": "s1"})
+        value = CalcInput(name="u", value=Decimal(1000), unit="unit", source_span_id="s1")
+        state.calculations = [Calculation(id="n", claim_id="c", inputs=[value], steps=[],
+                                          outputs={}, units={}, lineage=[state.groups[0].id])]
+        return state
+
+    state = build()
+    withdraw(state, "e2")                    # the repetition is not what the calculation cites
+    assert len(state.calculations) == 1
+    state = build()
+    withdraw(state, "e1", "corrected")
+    assert state.calculations == [] and state.groups[0].active
