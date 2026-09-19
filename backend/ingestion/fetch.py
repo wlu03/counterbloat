@@ -20,8 +20,8 @@ class FetchError(Exception):
     pass
 
 
-def validate_url(url: str) -> None:
-    """Raise unless the URL is http(s) and every address it resolves to is public."""
+def validate_url(url: str) -> str:
+    """Return one public address for the URL's host. Raise if any resolved address is not public."""
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise BlockedDestination(f"scheme or host not allowed: {url}")
@@ -34,14 +34,27 @@ def validate_url(url: str) -> None:
         # is_global is false for private, loopback, link-local, and metadata addresses.
         if not address.is_global:
             raise BlockedDestination(f"{parsed.hostname} resolves to {address}")
+    return infos[0][4][0]
 
 
 def fetch(url: str) -> tuple[bytes, str, str]:
     """Return (content, media type, final URL). Each redirect target is validated again."""
+    try:
+        return _fetch(url)
+    except (httpx.HTTPError, httpx.InvalidURL, ValueError) as exc:
+        raise FetchError(f"cannot fetch {url}: {exc}") from exc
+
+
+def _fetch(url: str) -> tuple[bytes, str, str]:
     with httpx.Client(follow_redirects=False, timeout=30) as client:
         for _ in range(MAX_REDIRECTS + 1):
-            validate_url(url)
-            with client.stream("GET", url, headers={"User-Agent": "Countercheck/0.1"}) as response:
+            # The request goes to the address that was checked, so a second DNS answer cannot
+            # redirect it. The Host header and TLS server name still carry the hostname.
+            target = httpx.URL(url)
+            pinned = target.copy_with(host=validate_url(url))
+            headers = {"Host": target.netloc.decode(), "User-Agent": "Countercheck/0.1"}
+            with client.stream("GET", pinned, headers=headers,
+                               extensions={"sni_hostname": target.host}) as response:
                 if response.is_redirect:
                     url = urljoin(url, response.headers["location"])
                     continue

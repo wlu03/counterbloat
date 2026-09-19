@@ -11,3 +11,47 @@ from backend.ingestion.fetch import BlockedDestination, validate_url
 def test_private_and_non_http_destinations_are_blocked(url):
     with pytest.raises(BlockedDestination):
         validate_url(url)
+
+
+def test_request_goes_to_the_checked_address(monkeypatch):
+    """The second DNS answer is private. The fetch must not connect to it."""
+    import socket
+
+    import httpx
+
+    from backend.ingestion import fetch as module
+
+    answers = iter(["93.184.216.34", "127.0.0.1"])
+    monkeypatch.setattr(socket, "getaddrinfo",
+                        lambda host, port, *a, **k: [(2, 1, 6, "", (next(answers), 0))])
+    seen = {}
+
+    def handler(request):
+        seen["host"], seen["header"] = request.url.host, request.headers["host"]
+        return httpx.Response(200, headers={"content-type": "text/html"}, content=b"<p>ok</p>")
+
+    real = httpx.Client
+    monkeypatch.setattr(module.httpx, "Client",
+                        lambda **kwargs: real(transport=httpx.MockTransport(handler)))
+    content, media_type, _ = module.fetch("http://rebind.test/page")
+    assert content == b"<p>ok</p>" and media_type == "text/html"
+    assert seen == {"host": "93.184.216.34", "header": "rebind.test"}
+
+
+def test_transport_and_parse_failures_are_fetch_errors(monkeypatch, store):
+    import httpx
+
+    from backend.ingestion import fetch as module
+    from backend.ingestion.snapshot import admit
+
+    def refuse(request):
+        raise httpx.ConnectError("refused")
+
+    real = httpx.Client
+    monkeypatch.setattr(module, "validate_url", lambda url: "93.184.216.34")
+    monkeypatch.setattr(module.httpx, "Client",
+                        lambda **kwargs: real(transport=httpx.MockTransport(refuse)))
+    with pytest.raises(module.FetchError):
+        module.fetch("http://example.com/")
+    with pytest.raises(module.FetchError):
+        admit(store, b"<!-- app shell -->", "text/html")

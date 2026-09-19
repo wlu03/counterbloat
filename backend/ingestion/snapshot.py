@@ -1,4 +1,7 @@
-"""Preserve source bytes by content hash and record an immutable snapshot."""
+"""Preserve source bytes by content hash and record a snapshot.
+
+Admitting the same bytes again keeps the stored url and dates and fills only the missing ones.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -8,7 +11,7 @@ from pathlib import Path
 from backend.config import env
 from backend.db import Store
 from backend.ingestion import parse as parser
-from backend.ingestion.fetch import fetch
+from backend.ingestion.fetch import FetchError, fetch
 from backend.models import DocumentSnapshot, SourceSpan
 
 
@@ -23,8 +26,16 @@ def admit(store: Store, content: bytes, media_type: str, url: str | None = None,
           admissible_from: datetime | None = None) -> tuple[DocumentSnapshot, list[SourceSpan]]:
     digest = hashlib.sha256(content).hexdigest()
     document_id = f"doc-{digest[:16]}"
+    existing = store.get("documents", document_id, DocumentSnapshot)
+    if existing is not None:
+        url = existing.url or url
+        published_at = existing.published_at or published_at
+        admissible_from = existing.admissible_from or admissible_from
     (object_dir() / digest).write_bytes(content)
-    text, spans, flags = parser.parse(document_id, content, media_type)
+    try:
+        text, spans, flags = parser.parse(document_id, content, media_type)
+    except Exception as exc:
+        raise FetchError(f"cannot parse document: {exc}") from exc
     (object_dir() / f"{digest}.txt").write_text(text)
     snapshot = DocumentSnapshot(
         id=document_id, url=url, sha256=digest, media_type=media_type, published_at=published_at,
