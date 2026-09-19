@@ -51,7 +51,7 @@ def main() -> None:
     result = {"is_synthetic_example": True, "job": store.get("analyses", "smoke"),
               "calls_made": sum(llm.calls for llm in llms), "max_calls": args.max_calls,
               "findings": [f.model_dump(mode="json") for f in findings],
-              "internal": [{"claim": s.claim.text, "target": s.target.id,
+              "internal": [{"claim": s.claim.text, "target": s.target.id if s.target else None,
                             "belief": s.belief.model_dump(mode="json") if s.belief else None,
                             "calculations": [c.model_dump(mode="json") for c in s.calculations]}
                            for s in states],

@@ -7,13 +7,23 @@ from __future__ import annotations
 import argparse
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypeVar
 
 from pydantic import BaseModel
 
 from backend.config import env
 from backend.db import Store
 from backend.models import Calculation, Claim, EvidenceItem, InvestigationState, VerificationQuestion
+
+
+T = TypeVar("T")
+
+
+def need(value: T | None, what: str) -> T:
+    """A trace file is outside input. An event that lacks a field its kind needs is refused."""
+    if value is None:
+        raise ValueError(f"trace event lacks {what}")
+    return value
 
 
 class Event(BaseModel):
@@ -42,7 +52,8 @@ def export_trace(store: Store, analysis_id: str, claim_id: str) -> Trace:
     Evidence and calculations are ordered by the round that produced them. Items withdrawn
     during the run are not exported.
     """
-    state = store.get("states", f"{analysis_id}-{claim_id}", InvestigationState)
+    state = need(store.get("states", f"{analysis_id}-{claim_id}", InvestigationState),
+                 "a stored state for this analysis and claim")
     manifest = store.get("manifests", analysis_id) or {}
     events = []
     for number in sorted({e.round for e in state.evidence} | {c.round for c in state.calculations}):
@@ -65,7 +76,7 @@ def main() -> None:
     parser.add_argument("claim_id")
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
-    store = Store(env("DATABASE_URL", "sqlite:///countercheck.db"))
+    store = Store(env("DATABASE_URL") or "sqlite:///countercheck.db")
     trace = export_trace(store, args.analysis_id, args.claim_id)
     Path(args.out).write_text(trace.model_dump_json(indent=2))
 

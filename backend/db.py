@@ -1,7 +1,7 @@
 """Relational storage. Each table keeps its foreign keys as columns and the record as JSON."""
 from __future__ import annotations
 
-from typing import TypeVar
+from typing import TypeVar, overload
 
 from pydantic import BaseModel
 from sqlalchemy import JSON, Column, MetaData, String, Table, create_engine, select
@@ -57,6 +57,11 @@ class Store:
         with self.engine.begin() as conn:
             conn.execute(t.update().where(t.c.id == record_id).values(data=payload))
 
+    @overload
+    def get(self, table: str, record_id: str) -> dict | None: ...
+    @overload
+    def get(self, table: str, record_id: str, model: type[T]) -> T | None: ...
+
     def get(self, table: str, record_id: str, model: type[T] | None = None) -> T | dict | None:
         t = TABLES[table]
         with self.engine.connect() as conn:
@@ -64,6 +69,11 @@ class Store:
         if row is None:
             return None
         return model.model_validate(row[0]) if model else row[0]
+
+    @overload
+    def find(self, table: str, **keys: str) -> list[dict]: ...
+    @overload
+    def find(self, table: str, model: type[T], **keys: str) -> list[T]: ...
 
     def find(self, table: str, model: type[T] | None = None, **keys: str) -> list[T] | list[dict]:
         t = TABLES[table]

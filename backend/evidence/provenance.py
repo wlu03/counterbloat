@@ -53,7 +53,8 @@ def reconcile(state: InvestigationState, items: list[EvidenceItem],
         # A repetition admitted before its original was grouped alone. Join them now, so the
         # grouping does not depend on the order of arrival.
         original = by_span.get(item.repeats_span_id or "")
-        if original is not None and original.group_id != item.group_id:
+        if original is not None and original.group_id and item.group_id \
+                and original.group_id != item.group_id:
             item.origin = EvidenceOrigin.third_party_repetition
             merge(state, original.group_id, item.group_id)
     return evidence_hash(state.groups) != before

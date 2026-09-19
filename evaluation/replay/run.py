@@ -28,7 +28,7 @@ from backend.providers.base import ProviderError
 from backend.verification.numeric import claim_relation, execute
 from evaluation.budget import Budgeted
 from evaluation.replay.scripted import ScriptedLLM
-from evaluation.replay.trace import Event, Trace
+from evaluation.replay.trace import Event, Trace, need
 
 STRATEGIES = ["linguistic", "full_context", "evidence_accumulator"]
 IRRELEVANT = "The annual general meeting was held at the registered office."
@@ -45,16 +45,17 @@ def replay(trace: Trace, settings: AssessmentSettings, llm, manifest: RunManifes
         new_calculations: list[str] = []
         changed = event.kind in ("withdraw", "correct", "merge")
         if event.kind in ("withdraw", "correct"):
-            withdraw(state, event.evidence_id, "corrected" if event.kind == "correct" else "withdrawn")
+            withdraw(state, need(event.evidence_id, "evidence_id"),
+                     "corrected" if event.kind == "correct" else "withdrawn")
         if event.kind == "merge":
             merge(state, *event.group_ids)
         if event.kind in ("admit", "correct"):
-            item = event.evidence.model_copy(deep=True)
+            item = need(event.evidence, "evidence").model_copy(deep=True)
             repeats = {item.span_id: item.repeats_span_id} if item.repeats_span_id else {}
             changed = reconcile(state, [item], repeats) or changed
             new_evidence = [item.id]
         if event.kind == "calculate":
-            saved = event.calculation
+            saved = need(event.calculation, "calculation")
             spans = [i.source_span_id for i in saved.inputs]
             result = execute(saved.id, claim.id, saved.inputs, saved.steps, saved.note,
                              lineage(state, spans))
@@ -96,14 +97,16 @@ def _permuted(trace: Trace, rng: random.Random) -> Trace:
     admits = [e for e in head if e.kind == "admit"]
     waiting = [e for e in head if e.kind == "calculate"]
     rng.shuffle(admits)
-    evidence_spans = {e.evidence.span_id for e in admits}
+    spans_of = {id(e): need(e.evidence, "evidence").span_id for e in admits}
+    evidence_spans = set(spans_of.values())
     ordered: list[Event] = []
     present: set[str] = set()
     for event in admits:
         ordered.append(event)
-        present.add(event.evidence.span_id)
+        present.add(spans_of[id(event)])
         ready = [c for c in waiting
-                 if {i.source_span_id for i in c.calculation.inputs} & evidence_spans <= present]
+                 if {i.source_span_id for i in need(c.calculation, "calculation").inputs}
+                 & evidence_spans <= present]
         ordered += ready
         waiting = [c for c in waiting if c not in ready]
     return trace.model_copy(update={"events": ordered + waiting + trace.events[len(head):]})
@@ -115,7 +118,8 @@ def variants(trace: Trace, seed: int, permutations: int) -> dict[str, Trace]:
     for k in range(permutations):
         out[f"permutation_{k}"] = _permuted(trace, rng)
     removed = {e.evidence_id for e in trace.events if e.evidence_id}
-    active = [e.evidence for e in trace.events if e.kind == "admit" and e.evidence.id not in removed]
+    admitted = [need(e.evidence, "evidence") for e in trace.events if e.kind == "admit"]
+    active = [e for e in admitted if e.id not in removed]
     if not active:
         return out
     pick = rng.choice(active)
@@ -148,7 +152,7 @@ def compare(runs: dict[str, dict]) -> dict:
 
     orders = [n for n in runs if n.startswith("permutation_")]
     ranges = [c for c in map(score_change, orders) if c is not None]
-    summary = {"order_changes_status": any(runs[n]["final_status"] != base["final_status"]
+    summary: dict = {"order_changes_status": any(runs[n]["final_status"] != base["final_status"]
                                            for n in orders),
                "order_score_range": max(ranges) if ranges else None}
     for name in runs:
@@ -164,7 +168,8 @@ def run_all(trace: Trace, names: list[str], provider: str, seed: int, permutatio
     remaining = max_calls
     results = {}
     for name in names:
-        settings = AssessmentSettings(updater=name, prior=prior, tempering=tempering)
+        settings = AssessmentSettings.model_validate(
+            {"updater": name, "prior": prior, "tempering": tempering})
         runs = {}
         for variant, changed in variants(trace, seed, permutations).items():
             manifest = RunManifest(analysis_id=f"replay-{trace.id}", mode=Mode.replay,

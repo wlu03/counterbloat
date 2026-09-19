@@ -108,6 +108,7 @@ def verify(row: dict, llm_factory: Callable, searchable: dict[str, list[dict]],
                 compressor=compressor, target=task.target,
                 settings=settings if system == "A1" else settings_for(system, settings))
     score = None
+    status: str
     if system == "A1":
         manifest = RunManifest(analysis_id=str(row["id"]), mode=Mode.frozen, config_hash="")
         claim = Claim(id=str(row["id"]), document_id=document.id, span_id="", text=text,
@@ -164,8 +165,9 @@ def score(predictions: list[dict], gold: list[dict], task: VerificationTask | No
               if p["score"] is not None]
     # Score metrics cover only the examples that have a score. Without any, they do not exist.
     result["with_score"] = len(scored)
-    result["brier"] = brier(*zip(*scored)) if scored else "unavailable"
-    result["nll"] = nll(*zip(*scored)) if scored else "unavailable"
+    values, outcomes = [s for s, _ in scored], [y for _, y in scored]
+    result["brier"] = brier(values, outcomes) if scored else "unavailable"
+    result["nll"] = nll(values, outcomes) if scored else "unavailable"
     return result
 
 

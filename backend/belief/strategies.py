@@ -41,6 +41,12 @@ def new_target(claim: Claim, cutoff: datetime | None) -> ScoringTarget:
                                 "uncalibrated and are not comparable across targets.")
 
 
+def _target(state: InvestigationState) -> ScoringTarget:
+    if state.target is None:
+        raise ValueError("a score needs a declared target, and this state has none")
+    return state.target
+
+
 def active_evidence(state: InvestigationState) -> list[EvidenceItem]:
     active = {g.id for g in state.groups if g.active}
     return [e for e in state.evidence if e.group_id in active]
@@ -106,7 +112,7 @@ def accumulate(state: InvestigationState, settings: AssessmentSettings) -> Numer
     for score in used:
         ledger.upsert(EvidenceContribution(score.group_id, score.group_version, score.log_evidence))
     return NumericBelief(
-        target_id=state.target.id, method="evidence_accumulator", prior=settings.prior,
+        target_id=_target(state).id, method="evidence_accumulator", prior=settings.prior,
         prior_provenance="neutral scenario prior, not estimated from data",
         raw_logit=ledger.raw_logit(), raw_probability=ledger.raw_probability(), contributions=used)
 
@@ -118,7 +124,7 @@ def score_groups(state: InvestigationState, llm: LLM, manifest: RunManifest) -> 
         ids = {g.id for g in groups}
         members = [e for e in state.evidence if e.group_id in ids]
         related = [c for c in state.calculations if ids & set(c.lineage)]
-        context = context_hash(state.target, state.claim, members, related)
+        context = context_hash(_target(state), state.claim, members, related)
         cached = next((s for s in state.scores if s.group_id == key
                        and s.group_version == _version(groups)
                        and s.conditioning_context_hash == context), None)
@@ -126,7 +132,7 @@ def score_groups(state: InvestigationState, llm: LLM, manifest: RunManifest) -> 
             kept.append(cached)
             continue
         try:
-            draft = llm.score_evidence(state.target, state.claim, members, related)
+            draft = llm.score_evidence(_target(state), state.claim, members, related)
         except ProviderError as exc:
             manifest.errors.append(f"evidence score unavailable for {key}: {exc}")
             continue
@@ -149,13 +155,12 @@ def run(state: InvestigationState, new_evidence_ids: list[str], new_calculation_
     """Apply the configured strategy to a state that already holds the round's observations."""
     if settings.updater == "full_context":
         # One representative per provenance group, and no earlier verdict or score.
-        seen: set[str] = set()
-        evidence = [e for e in active_evidence(state)
-                    if not (e.group_id in seen or seen.add(e.group_id))]
-        result = llm.reassess(state.target, state.claim, evidence, state.calculations,
+        first = {e.group_id: e for e in reversed(active_evidence(state))}
+        evidence = [e for e in active_evidence(state) if first[e.group_id] is e]
+        result = llm.reassess(_target(state), state.claim, evidence, state.calculations,
                               state.questions)
         p = result.probability
-        belief = NumericBelief(target_id=state.target.id, method="full_context",
+        belief = NumericBelief(target_id=_target(state).id, method="full_context",
                                raw_probability=p if p is not None and 0.0 < p < 1.0 else None)
         return StateUpdate(**result.model_dump(exclude={"probability"})), belief
     update = llm.update_state(state, new_evidence_ids, new_calculation_ids)
