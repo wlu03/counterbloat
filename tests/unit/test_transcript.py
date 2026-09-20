@@ -70,3 +70,23 @@ def test_misaligned_features_are_refused(tmp_path):
 def test_speaker_labels_that_do_not_line_up_are_ignored(tmp_path):
     data, labels = _call(tmp_path, labels="Person,Sentence\nPerson1,a\n")
     assert [s.speaker for s in read_call(data, "20240101_TEST", labels)] == [None] * 4
+
+
+@pytest.mark.parametrize("line", [
+    "We will now begin the question-and-answer session.",
+    "Nicole, we are ready to open up the lines for questions.",
+    "Karen, we are now ready to open the line for questions.",
+    "Operator, do we have any questions.",
+    "The first question comes from an analyst at a bank.",
+])
+def test_the_handoff_to_the_operator_ends_prepared_remarks(line):
+    assert qa_start(["Revenue grew.", line, "Can you size it?"]) == 2
+
+
+@pytest.mark.parametrize("line", [
+    "That is a really good question and I will start.",
+    "Let me start with your second question regarding margins.",
+    "We received a question about pricing during the roadshow.",
+])
+def test_an_executive_saying_question_does_not_end_prepared_remarks(line):
+    assert qa_start(["Revenue grew.", line, "Margins improved."]) is None

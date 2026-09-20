@@ -12,8 +12,21 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-# The operator says this when prepared remarks end. Only some calls keep the line.
-QA_MARKER = re.compile(r"question[- ]and[- ]answer|begin the question", re.I)
+# Transcripts mark the end of prepared remarks in two ways: a heading the transcriber inserted,
+# or the moment someone hands the call to the operator. Both are matched, and the earliest wins.
+# The patterns are written to be wrong rarely rather than to fire often: on the calls that carry
+# the heading, the handoff patterns agree with it to within three sentences about seven times in
+# ten and almost never fire earlier. A call whose wording is not matched is left unknown.
+QA_MARKER = re.compile(
+    r"question[- ]and[- ]answer"
+    r"|begin the question"
+    r"|open(?:ing)?\s+(?:up\s+)?the\s+lines?\s+(?:up\s+)?(?:for|to)\s+questions?"
+    r"|ready\s+(?:for|to\s+take)\s+(?:your\s+)?questions?"
+    r"|operator[,.]?\s+(?:do\s+we\s+have|are\s+there|any)\b[^.]{0,25}questions?"
+    r"|(?:first|next)\s+question\s+(?:comes|is|will\s+come)\s+from"
+    r"|question\s+comes\s+from\s+"
+    r"|turn\s+(?:it|the\s+call)\s+(?:back\s+)?(?:over\s+)?to\s+[^.]{0,30}questions?",
+    re.I)
 PREPARED, QA, UNKNOWN = "prepared", "qa", "unknown"
 
 

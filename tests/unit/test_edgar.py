@@ -83,3 +83,30 @@ def test_filings_read_the_older_file_only_when_more_are_wanted(monkeypatch):
     found = edgar.filings("320193", form="10-K", limit=5)
     assert [f.filed_at for f in found] == ["2024-11-01", "2015-10-28"]
     assert any(u.endswith(OLDER_NAME) for u in seen)
+
+
+def test_a_dropped_connection_is_retried_but_a_refusal_is_not(monkeypatch):
+    monkeypatch.setenv("FETCH_USER_AGENT", "Countercheck contact@example.com")
+    monkeypatch.setattr(edgar.time, "sleep", lambda s: None)
+    calls = []
+
+    def flaky(url, types):
+        calls.append(url)
+        if len(calls) < 3:
+            raise FetchError("handshake operation timed out")
+        return b'{"ok": true}', "application/json", url
+
+    monkeypatch.setattr(edgar, "fetch", flaky)
+    assert edgar.read_json("https://data.sec.gov/x.json") == {"ok": True}
+    assert len(calls) == 3
+
+    calls.clear()
+
+    def refused(url, types):
+        calls.append(url)
+        raise FetchError("https://data.sec.gov/x.json returned 404")
+
+    monkeypatch.setattr(edgar, "fetch", refused)
+    with pytest.raises(FetchError, match="404"):
+        edgar.read_json("https://data.sec.gov/x.json")
+    assert len(calls) == 1

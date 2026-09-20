@@ -52,15 +52,29 @@ def pad(cik: str | int) -> str:
     return digits.zfill(10)
 
 
-def read_json(url: str) -> dict:
+def read_json(url: str, attempts: int = 3) -> dict:
+    """Read one JSON document, pausing between requests and retrying a dropped connection.
+
+    A sweep over many companies is thousands of requests, and a connection that times out part
+    way through should not end it. A refusal such as 403 or 404 is not retried.
+    """
     global _last_request
     require_contact()
-    wait = MIN_SECONDS_BETWEEN_REQUESTS - (time.monotonic() - _last_request)
-    if wait > 0:
-        time.sleep(wait)
-    content, _, _ = fetch(url, ("application/json",))
-    _last_request = time.monotonic()
-    return json.loads(content)
+    for attempt in range(1, attempts + 1):
+        wait = MIN_SECONDS_BETWEEN_REQUESTS - (time.monotonic() - _last_request)
+        if wait > 0:
+            time.sleep(wait)
+        try:
+            content, _, _ = fetch(url, ("application/json",))
+        except FetchError as exc:
+            _last_request = time.monotonic()
+            if attempt == attempts or "returned" in str(exc):
+                raise
+            time.sleep(attempt)
+            continue
+        _last_request = time.monotonic()
+        return json.loads(content)
+    raise FetchError(f"cannot read {url}")
 
 
 def cik_for(ticker: str) -> str:
