@@ -206,6 +206,24 @@ def create_app(deps: Deps | None = None) -> FastAPI:
         """Calls with a transcript, a matching annual report and filed figures."""
         return {"calls": calls.catalogue()}
 
+    @app.post("/calls/{call_id}/run", dependencies=guard)
+    def start_run(call_id: str, tasks: BackgroundTasks, d: Deps = Depends(get_deps)):
+        """Read the call and build its ledger. The reader polls the ledger while this runs."""
+        if not any(c["id"] == call_id for c in calls.catalogue()):
+            raise HTTPException(404, "call not found")
+        d.store.put("call_runs", call_id, {"transcriptId": call_id, "status": "running",
+                                           "claims": [], "claimsFound": 0, "evidenceItems": 0})
+
+        def work() -> None:
+            try:
+                calls.run_workflow(call_id, d.store, d)
+            except Exception as exc:  # the reader must see a failure, not a run that never ends
+                d.store.put("call_runs", call_id, {"transcriptId": call_id, "status": "failed",
+                                                   "claims": [], "error": str(exc)[:400]})
+
+        tasks.add_task(work)
+        return {"transcriptId": call_id, "status": "running"}
+
     @app.get("/calls/{call_id}/ledger", dependencies=guard)
     def read_ledger(call_id: str, d: Deps = Depends(get_deps)):
         run = found(d.store.get("call_runs", call_id), "ledger")

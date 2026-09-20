@@ -84,3 +84,59 @@ def as_ledger(call_id: str, rows: list[dict], sentences: int) -> dict:
         "calibrationNote": ("no curve is fitted: too few claims can be settled against a "
                             "filed figure, and none of those disagreed"),
     }
+
+
+def run_workflow(call_id: str, store, deps, span_limit: int = 12) -> dict:
+    """Read one call end to end and store the ledger it produced.
+
+    Imported inside the function because the workflow pulls in the corpus reader, the filing
+    parser and the providers, none of which the rest of the API needs.
+    """
+    from backend.claims.extract import extract
+    from backend.ingestion import transcript
+    from backend.ingestion.edgar import cik_for
+    from backend.ingestion.fetch import fetch
+    from backend.ingestion.parse import parse
+    from backend.ingestion.sections import sections
+    from backend.models import Mode, RunManifest
+    from backend.orchestration.overstatement import as_dicts, company_spans, row_for
+
+    record = next((c for c in catalogue() if c["id"] == call_id), None)
+    if record is None:
+        raise LookupError(f"no prepared call {call_id}")
+    dataset = Path(corpus_root()) / "MAEC_Dataset"
+    labels = Path(corpus_root()) / "MAEC_Dataset_Person_Label"
+    sentences = transcript.read_call(dataset, call_id, labels)
+    speakers = transcript.speakers_in_prepared(sentences)
+    _, spans = transcript.spans(sentences)
+    turns = transcript.turns(sentences)
+    chosen = company_spans(spans, sentences, speakers, min_chars=100)[:span_limit]
+
+    manifest = RunManifest(analysis_id=call_id, mode=Mode.live, config_hash="workflow")
+    llm = deps.llm_factory(manifest)
+    claims = extract(chosen, llm, None, manifest, id_prefix=f"{record['ticker']}-", workers=8)
+    content, media, _ = fetch(record["sourceUrl"])
+    _, filing_spans, _ = parse(record["accession"], content, media)
+    filing = sections(filing_spans)
+    cik, period = cik_for(record["ticker"]), record["period"].replace(" ", "-")
+    by_index = {s.index: s for s in sentences}
+    rows = []
+    for claim in claims:
+        sentence = by_index[int(claim.span_id.split(":")[1])]
+        rows.append(row_for(
+            claim, speaker=sentence.speaker, segment=sentence.segment, cik=cik, sections=filing,
+            period=period, accession=record["accession"], source_url=record["sourceUrl"],
+            turn=next((t.text for t in turns if claim.text in t.text), None),
+            call_date=record["callDate"], scorer=llm, manifest=manifest, embed=llm.embed))
+    ledger = as_ledger(call_id, as_dicts(rows), sentences=len(sentences))
+    ledger["status"] = "done"
+    ledger["errors"] = manifest.errors
+    store.put("call_runs", call_id, ledger)
+    return ledger
+
+
+def corpus_root() -> str:
+    """Where the aligned call corpus was unpacked."""
+    import os
+    return os.environ.get("MAEC_ROOT", str(next(
+        Path("datasets/maec/source").glob("MAEC-*"), Path("datasets/maec/source"))))

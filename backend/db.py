@@ -30,6 +30,7 @@ TABLES = {
     "findings": _table("findings", "analysis_id", "claim_id"),
     "reviews": _table("reviews", "finding_id"),
     "manifests": _table("manifests", "analysis_id"),
+    "call_runs": _table("call_runs"),
 }
 
 
