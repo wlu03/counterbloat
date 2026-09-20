@@ -237,6 +237,28 @@ How to read this:
 - One run per case does not measure run-to-run variation. The pipeline gave `mixed` and then
   `insufficient` for the same case in two runs. Use `--repeats 3` for that measure.
 
+### What the Tier 1 changes did (2026-09-20)
+
+Counting a basis difference only where the claim states it, keeping the analyst's own reading
+beside the rewritten one, and taking the majority of three updater samples, measured on the same
+60 CLIMATE-FEVER claims at seed 5:
+
+| | agreement | coverage | right when committed | calls |
+|---|---|---|---|---|
+| baseline | 40% | 35% | 57% | 60 |
+| pipeline before | 25% | 12% | 14% | 453 |
+| pipeline after | 25% | 22% | 15% | 656 |
+
+Coverage nearly doubled and agreement did not move, because the claims it now commits to are
+mostly ones it gets wrong. The updater proposed `insufficient` in 45 of the 46 abstentions that
+remain, so the gate is now responsible for one of them.
+
+`mixed` is where the new commitments went: 11 predictions, 1 correct. Gating `mixed` the way
+`supported` and `contradicted` are gated would be worth nothing here. It would turn one wrong
+prediction into a correct abstention and one correct prediction into a wrong one. The nine
+others are claims the pipeline committed to in the wrong direction, which abstaining does not
+fix.
+
 ### What the pipeline costs and where it loses (2026-09-20)
 
 Measured on 40 QuanTemp claims and 60 CLIMATE-FEVER claims, seed 5, against A1, the one-search
