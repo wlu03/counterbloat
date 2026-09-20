@@ -191,3 +191,4 @@ def test_observations_survive_a_failed_updater_without_a_transition(store):
     assert state.version == 0 and state.assessment.status == EvidenceStatus.insufficient
     assert store.find("updates", claim_id=state.claim.id) == []
     assert store.get("analyses", "an-1")["partial"] is True
+

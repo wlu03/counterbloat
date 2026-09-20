@@ -29,8 +29,16 @@ def retrieve(index: SearchIndex, store: Store, claim: Claim,
             manifest.embedding_search = used and manifest.embedding_search is not False
         return found
 
+    if corpus is not None and settings.show_whole_corpus_under:
+        whole = [s for document in corpus
+                 for s in store.find("spans", SourceSpan, document_id=document)]
+        if 0 < len(whole) <= settings.show_whole_corpus_under:
+            return whole, []
+
     exact = " ".join(filter(None, [claim.subject, claim.metric, claim.period, claim.unit]))
-    hits: list[str] = []
+    # The claim's own wording is the best single query for it, and it is the one query that does
+    # not depend on a question the planner happened to write.
+    hits: list[str] = search(claim.text)[:settings.retained_passages_per_question]
     for question in questions:
         rankings = [search(f"{question.text} {question.evidence_needed}")]
         if exact:

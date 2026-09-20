@@ -1,5 +1,5 @@
 """Defects found by reviewing the follow-up after a reviewer asks for a check."""
-from backend.config import Settings
+from backend.config import Retrieval, Settings
 from backend.ingestion.snapshot import admit
 from backend.models import BeliefUpdate, EvidenceStatus, Finding, InvestigationState, Mechanism, Mode
 from backend.orchestration.worker import Deps, run_analysis
@@ -22,9 +22,10 @@ def _asks_once(reason=CHECK, then="accept", narrowed=None):
     return Reviewer
 
 
-def _run(store, llm, index=None, **settings):
+def _run(store, llm, index=None, retrieval=None, **settings):
     deps = Deps(store=store, index=index or MemoryIndex(), llm_factory=llm,
-                settings=Settings(mode=Mode.frozen, **settings))
+                settings=Settings(mode=Mode.frozen, retrieval=retrieval or Retrieval(),
+                                  **settings))
     snapshot, spans = admit(store, REPORT, "text/html")
     deps.index.index(snapshot, spans)
     store.put("analyses", "an-1", {"id": "an-1", "document_id": snapshot.id, "status": "queued"},
@@ -97,7 +98,7 @@ def test_the_requested_check_is_searched_for_before_other_open_questions(store):
             return [QuestionDraft(text=f"Planned question {i}?", why_it_matters="", evidence_needed="",
                                   materiality=3, answerability=3, critical=False) for i in range(4)]
 
-    _run(store, ManyQuestions, index=Recording())
+    _run(store, ManyQuestions, index=Recording(), retrieval=Retrieval(show_whole_corpus_under=0))
     assert any(CHECK in q for q in queries)
 
 
@@ -143,5 +144,5 @@ def test_one_keyword_only_search_marks_the_whole_analysis(store):
             self.used_embeddings = Flaky.searches != 2  # only the second search lacks vectors
             return super().search(query, **options)
 
-    _run(store, FakeLLM, index=Flaky())
+    _run(store, FakeLLM, index=Flaky(), retrieval=Retrieval(show_whole_corpus_under=0))
     assert Flaky.searches > 2 and store.get("manifests", "an-1")["embedding_search"] is False

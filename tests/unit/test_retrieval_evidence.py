@@ -199,3 +199,40 @@ def test_one_quote_admitted_for_two_targets_in_one_round_shares_a_group():
     assert reconcile(state, [for_claim, for_question], {})
     [group] = state.groups
     assert sorted(group.member_ids) == ["e1", "e2"]
+
+
+def _indexed(store, texts):
+    from backend.ingestion.snapshot import admit
+    index = MemoryIndex()
+    ids = []
+    for text in texts:
+        snapshot, spans = admit(store, f"<html><body><p>{text}</p></body></html>".encode(), "text/html")
+        index.index(snapshot, spans)
+        ids.append(snapshot.id)
+    return index, ids
+
+
+def test_a_corpus_that_fits_is_shown_whole_instead_of_being_searched(store):
+    from backend.config import Retrieval
+    from backend.models import VerificationQuestion
+    from backend.retrieval.search import retrieve
+
+    searched = []
+
+    class Recording(MemoryIndex):
+        def search(self, query, **options):
+            searched.append(query)
+            return super().search(query, **options)
+
+    index, ids = _indexed(store, ["Output doubled in 2025.", "Emissions per unit fell.",
+                                  "An unrelated note about the annual meeting."])
+    index.__class__ = Recording
+    question = VerificationQuestion(id="q", claim_id="c", text="What was the output?")
+    state = _state()
+    passages, context = retrieve(index, store, state.claim, [question],
+                                 Retrieval(show_whole_corpus_under=40), corpus=ids)
+    assert len(passages) == 3 and searched == []  # every passage shown, nothing searched
+    # Below the threshold the index is searched, and the claim's own wording is one of the queries.
+    passages, _ = retrieve(index, store, state.claim, [question],
+                           Retrieval(show_whole_corpus_under=0), corpus=ids)
+    assert state.claim.text in searched
