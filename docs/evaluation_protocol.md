@@ -319,6 +319,36 @@ source-linked evidence behind it. It is a trade, not a defect, and on this datas
 one. Coverage says the same thing: the pipeline commits on 33% of claims against the baseline's
 92%, while being equally accurate when it does commit, 45.0% against 45.5%.
 
+### Why QuanTemp fails (2026-09-20)
+
+40 QuanTemp claims at seed 5, `prompts-v13`, with the decision protocol. Each prediction now
+records what the updater had in hand, so the abstentions can be split by cause.
+
+Overall: 12.5% agreement, 25% coverage, 50% right when committed, against a baseline of 25.0%
+and a floor of 60.0%. Split by whether any admitted evidence was comparable with the claim:
+
+| | claims | committed | agreement |
+|---|---|---|---|
+| no comparable evidence | 21 | 0 | 0 / 21 = 0.0% |
+| some comparable evidence | 18 | 9 | 5 / 18 = 27.8% |
+| one-search baseline, all 40 | | | 25.0% |
+
+Where comparable evidence survives the pipeline matches the baseline. Where it does not, every
+claim is `insufficient` and none can be right. That accounts for the whole gap.
+
+Of the 21 claims with no comparable evidence, only 4 had no evidence admitted at all. The other
+17 had between 1 and 13 evidence items admitted and every one was judged to measure something
+other than the claim, which makes it qualifying rather than comparable, which the verdict gate
+then cannot use. No calculation ran on any of the 39 claims, so the gate's other route to a
+verdict, a result compared with the claim's stated value, was never available.
+
+This is the same mechanism that costs 6 net correct verdicts on CLIMATE-FEVER. On both datasets
+the comparability rule and the verdict gate together are the largest single cause of the
+pipeline scoring below a one-search baseline. They are also what guarantees that a recorded
+verdict has source-linked evidence behind it. Raising the ceiling on QuanTemp to the baseline's
+level would still leave it far below the floor of 60%, so QuanTemp does not become a dataset
+this system does well on.
+
 ### Two defects found by running one claim through the live pipeline (2026-09-20)
 
 This is one document and one claim, not a dataset result. It is recorded because each defect was
