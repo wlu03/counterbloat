@@ -20,6 +20,6 @@ datasets/*/manifest.json
 datasets/*/corpus_manifest.json
 
 # Upstream dataset sources, fetched from the publishers; not ours to redistribute.
-datasets/sources/
+datasets/*/source/
 .env.*
 !.env.example
