@@ -154,7 +154,8 @@ def verify(row: dict, llm_factory: Callable, searchable: dict[str, list[dict]],
                                assertion_type=AssertionType.reported_achievement), None)
     return {"id": row["id"], "system": system, "updater": deps.settings.assessment.updater,
             "status": status, "score": score, "target": target.id,
-            **({"stage": stage} if system != "A1" else {}), **_usage(manifest)}
+            **({"stage": stage} if system != "A1" else {}),
+            **({"admitted": admitted} if admitted else {}), **_usage(manifest)}
 
 
 def _cost(predictions: list[dict], prices: dict[str, list[float]] | None) -> float | str:
@@ -219,9 +220,13 @@ def score(predictions: list[dict], gold: list[dict], task: VerificationTask | No
     # An abstention while comparable evidence about the claim was in hand is a judgment the
     # updater made, not evidence the retrieval failed to find. Separating the two says which
     # part of the pipeline the abstentions belong to.
-    holding = [p for p, _ in abstained if p.get("admitted", {}).get("comparable")]
+    # A prediction written before this diagnostic existed carries no `admitted`, which is not the
+    # same as having held nothing. Those are counted separately so the split is never guessed.
+    known = [p for p, _ in abstained if p.get("admitted")]
+    holding = [p for p in known if p["admitted"].get("comparable")]
     result["abstained_holding_evidence"] = len(holding)
-    result["abstained_empty_handed"] = len(abstained) - len(holding)
+    result["abstained_empty_handed"] = len(known) - len(holding)
+    result["abstained_not_recorded"] = len(abstained) - len(known)
     if ran:
         counts = Counter(expected)
         best, seen = counts.most_common(1)[0]

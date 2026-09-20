@@ -211,6 +211,7 @@ def test_an_abstention_is_separated_by_whether_evidence_was_in_hand():
     # updater's judgment rather than a retrieval failure.
     assert result["abstained_holding_evidence"] == 2
     assert result["abstained_empty_handed"] == 1
+    assert result["abstained_not_recorded"] == 0
 
 
 def test_the_baseline_is_told_the_same_decision_protocol_as_the_pipeline():
@@ -233,3 +234,14 @@ def test_the_baseline_is_told_the_same_decision_protocol_as_the_pipeline():
     assert seen == ["RULE"]
     # Every dataset states one, so neither arm is left to a standard of its own.
     assert all(t.rubric.strip() for t in VERIFICATION.values())
+
+
+def test_a_prediction_without_the_diagnostic_is_not_counted_as_holding_nothing():
+    """The field was added mid-session, and its absence is not evidence of an empty hand."""
+    row = {"id": "a", "status": "insufficient", "score": None, "target": None, "calls": {},
+           "failed_calls": 0, "latency_ms": 0, "skipped_by_router": 0,
+           "compression_fallbacks": 0, "tokens_by_model": {}}
+    result = score([row], [{"id": "a", "label": "Refuted"}], TASK)
+    assert result["abstained"] == 1
+    assert result["abstained_not_recorded"] == 1
+    assert result["abstained_empty_handed"] == 0
