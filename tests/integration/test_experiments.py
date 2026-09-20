@@ -174,3 +174,23 @@ def test_the_score_reports_coverage_selective_accuracy_and_the_floor_to_beat():
     assert result["majority_class"] == "contradicted"
     assert result["majority_class_accuracy"] == pytest.approx(2 / 3)
     assert result["status_agreement"] == pytest.approx(2 / 3)
+
+
+def test_a_claim_that_never_ran_is_counted_beside_the_rates_it_is_left_out_of():
+    def prediction(example_id, status):
+        return {"id": example_id, "status": status, "score": None, "target": None, "calls": {},
+                "failed_calls": 0, "latency_ms": 0, "skipped_by_router": 0,
+                "compression_fallbacks": 0, "tokens_by_model": {}}
+
+    predictions = [prediction("a", "contradicted"), prediction("b", "insufficient"),
+                   prediction("c", "not_run"), prediction("d", "not_run"),
+                   prediction("e", "supported")]
+    gold = [{"id": i, "label": "Refuted"} for i in "abcde"]
+    result = score(predictions, gold, TASK)
+    assert result["scored"] == 3 and result["not_run"] == 2 and result["attempted"] == 5
+    # One of the three that ran agreed. Over the claims that ran that is a third; over every
+    # claim the run was given it is a fifth, and both are reported.
+    assert result["status_agreement"] == pytest.approx(1 / 3)
+    assert result["status_agreement_all"] == pytest.approx(1 / 5)
+    assert result["coverage"] == pytest.approx(2 / 3)
+    assert result["coverage_all"] == pytest.approx(2 / 5)

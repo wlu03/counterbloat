@@ -218,3 +218,22 @@ def test_the_analysts_own_reading_is_kept_beside_the_rewritten_one(store):
     rewritten = [e for e in state.evidence if e.relationship != e.judged]
     assert rewritten, "the fixture has a passage measured on another basis"
     assert all(e.judged == "contradicts" and e.relationship == "qualifies" for e in rewritten)
+
+
+def test_discovery_follows_the_open_questions_and_asks_each_query_once(store):
+    """One external passage used to stop every later round from looking outside the document."""
+    asked: list[str] = []
+
+    class Searching(FakeLLM):
+        def discover(self, query):
+            asked.append(query)
+            return []
+
+    deps = Deps(store=store, index=MemoryIndex(), settings=Settings(mode=Mode.live),
+                llm_factory=Searching)
+    # Two documents, so not every retrieved passage comes from the claim's own document.
+    _run(deps, [REPORT, ARTICLE])
+    # Discovery still ran while a critical question was open, and no query was repeated.
+    assert asked and len(asked) == len(set(asked))
+    # The query names the questions being worked on, not the claim alone.
+    assert all(q.strip() for q in asked) and any(len(q) > 80 for q in asked)

@@ -204,6 +204,7 @@ def _rounds(analysis_id: str, state: InvestigationState, seen: dict[str, SourceS
         documents = store.find("documents", DocumentSnapshot)
         corpus = [d.id for d in documents if admissible(d, mode, cutoff)]
     compressor = deps.compressor if settings.optimization.protected_compression else None
+    tried: set[str] = set()  # queries discovery has already been asked, so none is repeated
     for _ in range(budget):
         if _cancelled(store, analysis_id):
             state.stop_reason = "cancelled"
@@ -216,8 +217,16 @@ def _rounds(analysis_id: str, state: InvestigationState, seen: dict[str, SourceS
             break
         passages, context = retrieve(deps.index, store, claim, selected, settings.retrieval,
                                      corpus, cutoff, manifest)
-        if mode == Mode.live and all(p.document_id == claim.document_id for p in passages):
-            if discover(llm, store, deps.index, claim.text, manifest):
+        # Look outside the document while a critical question is still open, or while nothing
+        # was found at all. Where the passages came from does not say whether the questions are
+        # answered, and one external passage that turned out to be irrelevant used to stop every
+        # later round from looking. The query names the questions being worked on, and each
+        # query is asked once per investigation so the search cannot repeat itself.
+        query = " ".join([claim.text] + [q.text for q in selected])
+        if mode == Mode.live and (not passages or critical_open(state.questions)) \
+                and query not in tried:
+            tried.add(query)
+            if discover(llm, store, deps.index, query, manifest):
                 passages, context = retrieve(deps.index, store, claim, selected,
                                              settings.retrieval, corpus, cutoff, manifest)
         if not passages:

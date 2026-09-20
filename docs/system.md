@@ -61,6 +61,10 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
   `insufficient`. A review can weaken a verdict but not strengthen it. The summary was written
   for the status the model proposed, so when the gate rejects that status the summary is
   replaced with a fixed sentence. The model's own wording stays in the update's explanation.
+- In live mode the analysis looks outside the claim's document while a critical question is
+  still open, or while nothing was retrieved at all. The query names the questions being worked
+  on, and each query is asked once per investigation. Where a passage came from does not say
+  whether the questions are answered, so it does not decide this.
 - When the review asks for a check, the request becomes a critical question and gets at most
   `max_follow_up_rounds` further rounds, then a second review. A check that was still not
   completed is listed in the finding. The report is written from the reviewed assessment.
@@ -74,6 +78,9 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
   support it and the rewrite is dropped. This is what stops a contradicted claim from being
   rewritten back into its own number. The report is written after the review, so the number rule
   is the only check on its wording; nothing checks that the wording follows from the evidence.
+- Every rate the experiment scorer reports is over the claims that ran. The claims that did not
+  run are counted as `not_run`, and `status_agreement_all` and `coverage_all` are the same rates
+  over every claim the run was given.
 - Model output that fails validation is listed under `rejections` in the run manifest. It does
   not make a job partial. Operational failures are listed under `errors` and do.
 - A failed OpenAI, Jev, or Token Company call during an analysis is recorded in the run manifest

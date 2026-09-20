@@ -167,7 +167,14 @@ def score(predictions: list[dict], gold: list[dict], task: VerificationTask | No
     field = task.label_field if task else "label"
     labels = {str(g["id"]): g.get(field) for g in gold if usable(g.get(field))}
     ran = [p for p in predictions if str(p["id"]) in labels and p["status"] != "not_run"]
-    result = {"examples": len(predictions), "scored": len(ran),
+    # A claim the pipeline could not run is a claim it did not get right. Every rate below is
+    # over the claims that ran, so the count that did not is reported beside them and every rate
+    # has a failure-inclusive twin over `attempted`.
+    not_run = [p for p in predictions if str(p["id"]) in labels and p["status"] == "not_run"]
+    attempted = len(ran) + len(not_run)
+    result = {"examples": len(predictions), "scored": len(ran), "not_run": len(not_run),
+              "attempted": attempted,
+              "predictions_without_a_usable_label": len(predictions) - attempted,
               "gold_rows_without_a_usable_label": len(gold) - len(labels),
               "cost": _cost(predictions, prices),
               "calls": dict(sum((Counter(p["calls"]) for p in predictions), Counter())),
@@ -182,8 +189,9 @@ def score(predictions: list[dict], gold: list[dict], task: VerificationTask | No
     targets = {p.get("target") for p in ran}
     result["target"] = sorted(map(str, targets))
     expected = [task.status_of[labels[str(p["id"])]] for p in ran]
-    result["status_agreement"] = (sum(p["status"] == e for p, e in zip(ran, expected)) / len(ran)
-                                  if ran else None)
+    agreed = sum(p["status"] == e for p, e in zip(ran, expected))
+    result["status_agreement"] = agreed / len(ran) if ran else None
+    result["status_agreement_all"] = agreed / attempted if attempted else None
     result["confusion"] = dict(Counter(f"{e} -> {p['status']}" for p, e in zip(ran, expected)))
     # A system that never commits scores zero on a dataset with no abstention class, and a system
     # that always commits is scored on every example. Reporting only exact agreement hides which
@@ -193,6 +201,7 @@ def score(predictions: list[dict], gold: list[dict], task: VerificationTask | No
     abstained = [(p, e) for p, e in zip(ran, expected) if p["status"] == "insufficient"]
     result["committed"] = len(committed)
     result["coverage"] = len(committed) / len(ran) if ran else None
+    result["coverage_all"] = len(committed) / attempted if attempted else None
     result["accuracy_when_committed"] = len(right) / len(committed) if committed else None
     result["abstained"] = len(abstained)
     # How often abstaining was the right call, where the dataset has a class for it.
