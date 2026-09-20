@@ -10,7 +10,7 @@ from backend.config import Settings
 from backend.evidence.provenance import reconcile
 from backend.models import (
     AssertionType, CalcInput, CalcStep, Claim, EvidenceItem, EvidenceStatus, InvestigationState,
-    Relationship, SourceSpan,
+    Mechanism, Relationship, SourceSpan,
 )
 from backend.providers.base import ClaimDraft, Report, ReviewResult, StateUpdate
 from backend.verification.numeric import CalculationError, execute
@@ -253,3 +253,18 @@ def test_a_rewrite_may_not_restate_a_figure_that_only_the_claim_makes():
     assert "90" in finding.summary
     # A rewrite built from what the evidence says is kept.
     assert numbers_supported("Revenue grew 10%.", state, spans, quoting_claim=False)
+
+
+def test_an_abstention_carries_no_overstatement_mechanism():
+    """The updater named mechanisms alongside insufficient on the measured runs."""
+    state = InvestigationState(claim=_claim())
+    named = StateUpdate(status=EvidenceStatus.insufficient,
+                        mechanisms=[Mechanism.scope, Mechanism.selective_comparison],
+                        summary="The figures are per unit, not a total.", unresolved=[],
+                        explanation="e")
+    record = apply_update(state, named, [], [], "v")
+    assert record.new_status == EvidenceStatus.insufficient
+    # The status is what the model asked for, so its own summary is kept.
+    assert state.assessment.summary == named.summary
+    # A mechanism is a conclusion about the claim, and this status reaches none.
+    assert state.assessment.mechanisms == []

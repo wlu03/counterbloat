@@ -44,6 +44,10 @@ def apply_update(state: InvestigationState, update: StateUpdate, new_evidence_id
         # that answers a side question does not justify a verdict. Without either, the claim
         # is unresolved, not false.
         status, mechanisms = EvidenceStatus.insufficient, []
+    if status in (EvidenceStatus.insufficient, EvidenceStatus.not_yet_resolvable) and mechanisms:
+        # An overstatement mechanism is a conclusion about the claim, and these statuses reach
+        # none. The model named both on the measured runs, which the record cannot carry.
+        mechanisms = []
     # The summary was written for the status the model proposed. When the gate rejects that
     # status the summary states a verdict the record no longer holds, so it is replaced. The
     # model's own wording stays in the update's explanation.
