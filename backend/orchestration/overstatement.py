@@ -56,7 +56,14 @@ def _verdict(axes: Axes, stances: list[str]) -> str:
 def row_for(claim: Claim, *, speaker: str | None, segment: str, cik: str,
             sections: dict[str, Section], period: str | None = None,
             accession: str | None = None, source_url: str | None = None,
+            turn: str | None = None,
             embed: Callable[[list[str]], list[list[float]]] | None = None) -> Row:
+    """One row for one claim.
+
+    `turn` is the speaker's whole turn, used only for the word-category measures. A single
+    sentence holds too few words for the modal lists to register, so the delta taken over one
+    sentence is almost always zero and says nothing.
+    """
     check = xbrl.verify(claim, cik, period)
     matches = risk_matcher.match(claim, sections, accession=accession, source_url=source_url,
                                  embed=embed, k=3)
@@ -72,7 +79,7 @@ def row_for(claim: Claim, *, speaker: str | None, segment: str, cik: str,
     hedging = None
     if matches:
         try:
-            hedging = hedging_delta(claim.text, matches[0].quote)
+            hedging = hedging_delta(turn or claim.text, matches[0].quote)
         except LexiconMissing:
             hedging = None
     axes = assess(claim, [check.stance], hedging)

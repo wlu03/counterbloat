@@ -75,3 +75,19 @@ def test_a_wording_difference_alone_is_not_a_contradiction(monkeypatch):
     # The gap records the difference, but no agent disagreed, so the verdict does not say so.
     assert row.evidence_gap is not None and row.evidence_gap > 0
     assert row.verdict == overstatement.CONSISTENT
+
+
+def test_the_word_measures_read_the_whole_turn_not_one_sentence(monkeypatch):
+    monkeypatch.setattr(overstatement.xbrl, "verify",
+                        lambda c, cik, period=None: xbrl.Check(c.id, xbrl.NOT_FOUND, note="stub"))
+    seen = {}
+
+    def record(claim_text, passage):
+        seen["text"] = claim_text
+        return 0.0
+
+    monkeypatch.setattr(overstatement, "hedging_delta", record)
+    overstatement.row_for(_claim("Demand is strong."), speaker="Person1", segment="prepared",
+                          cik="0000012345", sections=SECTIONS, accession="a",
+                          turn="Demand is strong. We will always deliver on that.")
+    assert "We will always deliver" in seen["text"]

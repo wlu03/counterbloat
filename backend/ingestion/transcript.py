@@ -172,3 +172,43 @@ def spans(sentences: list[Sentence], document_id: str | None = None
     for i, span in enumerate(made[:-1]):
         made[i] = span.model_copy(update={"next_id": made[i + 1].id})
     return "\n".join(parts), made
+
+
+@dataclass(frozen=True)
+class Turn:
+    """Consecutive sentences from one speaker without another speaker in between."""
+    call_id: str
+    speaker: str | None
+    segment: str
+    first: int
+    last: int
+    text: str
+
+    def holds(self, index: int) -> bool:
+        return self.first <= index <= self.last
+
+
+def turns(sentences: list[Sentence]) -> list[Turn]:
+    """Group the call into speaking turns.
+
+    A word-category density taken over one sentence is mostly zero, because the strong and weak
+    modal lists hold a few dozen words between them. A turn is the smallest unit that gives such
+    a measure enough words to mean anything.
+    """
+    out: list[Turn] = []
+    for s in sentences:
+        if out and out[-1].speaker == s.speaker and out[-1].segment == s.segment \
+                and out[-1].last == s.index - 1:
+            last = out[-1]
+            out[-1] = Turn(last.call_id, last.speaker, last.segment, last.first, s.index,
+                           f"{last.text} {s.text}")
+        else:
+            out.append(Turn(s.call_id, s.speaker, s.segment, s.index, s.index, s.text))
+    return out
+
+
+def turn_holding(turns_: list[Turn], index: int) -> Turn | None:
+    for turn in turns_:
+        if turn.holds(index):
+            return turn
+    return None

@@ -2,7 +2,7 @@ import pytest
 
 from backend.ingestion.transcript import (
     PREPARED, QA, UNKNOWN, call_ids, qa_start, read_call, spans,
-    speakers_in_prepared, within_speaker_delta,
+    speakers_in_prepared, turn_holding, turns, within_speaker_delta,
 )
 
 TEXT = ["Revenue grew strongly.", "We will now begin the question-and-answer session.",
@@ -133,3 +133,27 @@ def test_a_boundary_that_leaves_almost_no_prepared_remarks_is_not_believed():
              "And then we will open up the call for the question-and-answer session.",
              *[f"Sentence {i}." for i in range(30)]]
     assert qa_start(lines) is None
+
+
+def test_consecutive_sentences_from_one_speaker_form_a_turn(tmp_path):
+    data, labels = _call(tmp_path)
+    grouped = turns(read_call(data, "20240101_TEST", labels))
+    # Person1, Person2, Person3, Person1 with a segment change at the third sentence.
+    assert [(t.speaker, t.first, t.last) for t in grouped] == [
+        ("Person1", 0, 0), ("Person2", 1, 1), ("Person3", 2, 2), ("Person1", 3, 3)]
+
+
+def test_a_run_by_the_same_speaker_becomes_one_turn(tmp_path):
+    data, labels = _call(tmp_path, labels="Person,Sentence\nPerson1,a\nPerson1,b\nPerson2,c\nPerson2,d\n")
+    grouped = turns(read_call(data, "20240101_TEST", labels))
+    assert [(t.speaker, t.first, t.last) for t in grouped] == [
+        ("Person1", 0, 1), ("Person2", 2, 3)]
+    # The first turn holds both of its sentences and carries both texts.
+    assert grouped[0].holds(1) and "question-and-answer" in grouped[0].text
+
+
+def test_the_turn_holding_a_sentence_is_found(tmp_path):
+    data, labels = _call(tmp_path)
+    grouped = turns(read_call(data, "20240101_TEST", labels))
+    assert turn_holding(grouped, 2).speaker == "Person3"
+    assert turn_holding(grouped, 99) is None
