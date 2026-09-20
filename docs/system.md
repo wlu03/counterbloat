@@ -52,6 +52,20 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
   and never changes an assessment. A failed embedding call is not recorded; search then uses
   keywords only.
 - A job with recorded errors is stored as partial. A cancelled job is stored as cancelled.
+- Replication of linked code (`backend/replication/replicate.py`, `backend/providers/devin.py`).
+  When an analysis is created with `replicate: true`, is in live mode, and Devin is configured,
+  one Devin session per linked GitHub or GitLab repository (at most `replication.max_repositories`)
+  clones it, runs its code, and returns measured values with their conditions, the commands, the
+  commit, and every deviation. The session is given none of the organisation's secrets or
+  knowledge, has an ACU limit and a time limit, and is stopped when the time limit passes. The
+  report is stored as a source document and cited like any other: its figures pass the quote
+  check, the number rule, and the verdict rule. A replication that could not run, gave no result,
+  or failed to start is recorded under `errors` and is not evidence against the claim. The
+  repository's text is treated as material under test, and every string from the session is
+  escaped before it is stored. Limits: one automated run on one machine is weak evidence about a
+  claim that depends on hardware, seeds, or long training; Devin can make mistakes, which is why
+  the report lists commands and deviations; the post itself must be pasted, because nothing here
+  fetches from X.
 - `Finding.probability` is always null. Internal scores are stored with their target and method,
   are left out of the public endpoints, and are served by `GET /claims/{id}/research` only when
   `COUNTERCHECK_RESEARCH_VIEW` is set.

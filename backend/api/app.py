@@ -35,6 +35,8 @@ class AnalysisRequest(BaseModel):
     mode: Mode | None = None
     cutoff: AwareDatetime | None = None
     selected_span_ids: list[str] = []
+    # Run the code of a repository that the document links to, in one paid Devin session.
+    replicate: bool = False
 
 
 class ReviewRequest(BaseModel):
@@ -67,8 +69,13 @@ def default_deps() -> Deps:
     if env("TTC_API_KEY"):
         from backend.providers.ttc import TokenCompanyCompressor
         compressor = TokenCompanyCompressor()
+    replicator = None
+    if env("DEVIN_API_KEY") and env("DEVIN_ORG_ID"):
+        from backend.replication.replicate import replicate
+        replicator = replicate
     return Deps(store=store, index=index, settings=settings, llm_factory=OpenAILLM,
-                router=router, compressor=compressor, transcribe=transcribe)
+                router=router, compressor=compressor, transcribe=transcribe,
+                replicator=replicator)
 
 
 def create_app(deps: Deps | None = None) -> FastAPI:
@@ -131,6 +138,7 @@ def create_app(deps: Deps | None = None) -> FastAPI:
         job = {"id": f"an-{uuid.uuid4().hex[:12]}", "document_id": request.document_id,
                "mode": request.mode, "cutoff": request.cutoff.isoformat() if request.cutoff else None,
                "selected_span_ids": request.selected_span_ids, "status": "queued",
+               "replicate": request.replicate,
                "idempotency_key": idempotency_key, "cancel_requested": False}
         d.store.put("analyses", job["id"], job, document_id=request.document_id,
                     idempotency_key=idempotency_key)

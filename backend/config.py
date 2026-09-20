@@ -34,6 +34,15 @@ class AssessmentSettings(BaseModel):
     review_original_decisive_evidence: Literal[True] = True
 
 
+class ReplicationSettings(BaseModel):
+    # Limits of the one paid Devin session per repository that an analysis may ask for. No
+    # analysis asks for one by default.
+    max_acu: int = 10
+    timeout_s: int = 3600
+    max_claims: int = 5
+    max_repositories: int = 1
+
+
 class Settings(BaseModel):
     mode: Mode = Mode.live
     max_investigation_rounds: int = 2
@@ -41,6 +50,7 @@ class Settings(BaseModel):
     retrieval: Retrieval = Retrieval()
     optimization: Optimization = Optimization()
     assessment: AssessmentSettings = AssessmentSettings()
+    replication: ReplicationSettings = ReplicationSettings()
 
     def config_hash(self) -> str:
         return hashlib.sha256(self.model_dump_json().encode()).hexdigest()[:16]

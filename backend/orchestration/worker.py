@@ -16,14 +16,17 @@ from backend.config import Settings
 from backend.db import Store
 from backend.evidence.ledger import admissible
 from backend.evidence.provenance import lineage, reconcile
+from backend.ingestion.snapshot import admit
 from backend.models import (
     AnswerStatus, Calculation, CalcInput, Claim, DocumentSnapshot, EvidenceItem, InvestigationState, Mode,
-    Relationship, RunManifest, ScoringTarget, SourceSpan, VerificationQuestion,
+    ProviderCall, Relationship, RunManifest, ScoringTarget, SourceSpan, VerificationQuestion,
 )
 from backend.planning import checklists
 from backend.planning.checklists import plan
 from backend.providers import prompts
 from backend.providers.base import LLM, Compressor, EvidenceAnalysis, ProviderError, Router
+from backend.providers.devin import Session
+from backend.replication.replicate import repositories
 from backend.retrieval.discovery import discover
 from backend.retrieval.search import SearchIndex, retrieve
 from backend.verification.numeric import (
@@ -40,6 +43,10 @@ class Deps:
     router: Router | None = None
     compressor: Compressor | None = None
     transcribe: Callable[[bytes], str] | None = None  # reads PDF pages that have no text layer
+    # Runs the code of a linked repository in a Devin session to test claims about it. It takes
+    # the repository address, the claim texts, an ACU limit, and a time limit. None when Devin is
+    # not configured.
+    replicator: Callable[[str, list[str], int, int], tuple[bytes | None, Session]] | None = None
     # What internal scores are scores of. An experiment on a labelled dataset declares its own.
     target: Callable[[Claim, datetime | None], ScoringTarget] = strategies.new_target
 
@@ -223,6 +230,38 @@ def _store(store: Store, analysis_id: str, state: InvestigationState) -> None:
               claim_id=claim_id)
 
 
+def _replicate(deps: Deps, claims: list[Claim], spans: list[SourceSpan], mode: Mode,
+               manifest: RunManifest) -> None:
+    """Run the code of each repository the document links to, and admit each report as a source.
+
+    Nothing here changes an assessment. A report is a document that the investigation may cite,
+    and a replication that gave no result is recorded as an error, not as evidence.
+    """
+    limits = deps.settings.replication
+    if deps.replicator is None or mode != Mode.live:
+        manifest.errors.append("replication was requested, but Devin is not configured or the "
+                               "analysis is not in live mode")
+        return
+    found = repositories("\n".join(s.text for s in spans))[:limits.max_repositories]
+    for repository in found:
+        call = ProviderCall(provider="devin", purpose="replicate", billing_unit="acus")
+        manifest.calls.append(call)
+        try:
+            content, session = deps.replicator(repository, [c.text for c in claims[:limits.max_claims]],
+                                               limits.max_acu, limits.timeout_s)
+        except ProviderError as exc:
+            call.error = str(exc)
+            manifest.errors.append(str(exc))
+            continue
+        call.acus, call.latency_ms = session.acus, int(session.seconds * 1000)
+        if content is None:
+            call.error = session.ended
+            manifest.errors.append(f"replication of {repository} gave no result: {session.ended}")
+            continue
+        snapshot, report_spans = admit(deps.store, content, "text/html", url=session.url)
+        deps.index.index(snapshot, report_spans)
+
+
 def run_analysis(analysis_id: str, deps: Deps) -> None:
     store = deps.store
     job = store.get("analyses", analysis_id)
@@ -246,6 +285,10 @@ def run_analysis(analysis_id: str, deps: Deps) -> None:
         router = deps.router if deps.settings.optimization.jev_routing else None
         claims = extract(spans, llm, router, manifest, set(job.get("selected_span_ids") or []),
                          id_prefix=f"{analysis_id}-")
+        if job.get("replicate") and claims:
+            # Asked for by this analysis only. The report is in the corpus before any claim is
+            # investigated, so every claim can cite it.
+            _replicate(deps, claims, spans, mode, manifest)
         save("running", claims_total=len(claims), claims_done=0)
         for done, claim in enumerate(claims, start=1):
             if _cancelled(store, analysis_id):

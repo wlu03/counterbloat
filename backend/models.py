@@ -326,6 +326,7 @@ class ProviderCall(BaseModel):
     cached_tokens: int = 0
     output_tokens: int = 0
     billing_unit: str = "tokens"
+    acus: float | None = None  # Devin compute units, as reported when the session ended
     latency_ms: int | None = None
     error: str | None = None
 
