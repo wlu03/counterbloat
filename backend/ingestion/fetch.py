@@ -39,15 +39,15 @@ def validate_url(url: str) -> str:
     return infos[0][4][0]
 
 
-def fetch(url: str) -> tuple[bytes, str, str]:
+def fetch(url: str, allowed_types: tuple[str, ...] = ALLOWED_TYPES) -> tuple[bytes, str, str]:
     """Return (content, media type, final URL). Each redirect target is validated again."""
     try:
-        return _fetch(url)
+        return _fetch(url, allowed_types)
     except (httpx.HTTPError, httpx.InvalidURL, ValueError) as exc:
         raise FetchError(f"cannot fetch {url}: {exc}") from exc
 
 
-def _fetch(url: str) -> tuple[bytes, str, str]:
+def _fetch(url: str, allowed_types: tuple[str, ...]) -> tuple[bytes, str, str]:
     with httpx.Client(follow_redirects=False, timeout=30) as client:
         for _ in range(MAX_REDIRECTS + 1):
             # The request goes to the address that was checked, so a second DNS answer cannot
@@ -65,7 +65,7 @@ def _fetch(url: str) -> tuple[bytes, str, str]:
                 if response.status_code != 200:
                     raise FetchError(f"{url} returned {response.status_code}")
                 media_type = response.headers.get("content-type", "").split(";")[0].strip()
-                if media_type not in ALLOWED_TYPES:
+                if media_type not in allowed_types:
                     raise FetchError(f"content type not allowed: {media_type}")
                 content = b""
                 for chunk in response.iter_bytes():

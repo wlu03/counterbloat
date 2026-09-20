@@ -1,0 +1,106 @@
+"""Read-only EDGAR reader: ticker to CIK, a company's filings, and the XBRL facts it filed.
+
+EDGAR has no API key. It refuses requests whose User-Agent does not name a contact address, and
+asks callers to stay under ten requests a second. Set FETCH_USER_AGENT to SEC's form,
+"Name contact@domain", before calling anything here.
+"""
+from __future__ import annotations
+
+import json
+import re
+import time
+from dataclasses import dataclass
+
+from backend.config import env
+from backend.ingestion.fetch import FetchError, fetch
+
+TICKERS = "https://www.sec.gov/files/company_tickers.json"
+SUBMISSIONS = "https://data.sec.gov/submissions/CIK{cik}.json"
+COMPANY_FACTS = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
+ARCHIVE = "https://www.sec.gov/Archives/edgar/data/{number}/{folder}/{document}"
+MIN_SECONDS_BETWEEN_REQUESTS = 0.1
+
+_last_request = 0.0
+
+
+@dataclass(frozen=True)
+class Filing:
+    cik: str
+    form: str
+    accession: str
+    filed_at: str
+    period: str | None
+    primary_document: str
+    url: str
+
+
+def require_contact() -> str:
+    """EDGAR answers 403 unless the User-Agent names a contact address."""
+    agent = env("FETCH_USER_AGENT", "")
+    if "@" not in agent:
+        raise FetchError(
+            "EDGAR needs FETCH_USER_AGENT in SEC's form, \"Name contact@domain\"")
+    return agent
+
+
+def pad(cik: str | int) -> str:
+    """EDGAR returns 404 or 500 for a CIK that is not padded to ten digits."""
+    digits = re.sub(r"\D", "", str(cik))
+    if not digits:
+        raise ValueError(f"not a CIK: {cik!r}")
+    return digits.zfill(10)
+
+
+def read_json(url: str) -> dict:
+    global _last_request
+    require_contact()
+    wait = MIN_SECONDS_BETWEEN_REQUESTS - (time.monotonic() - _last_request)
+    if wait > 0:
+        time.sleep(wait)
+    content, _, _ = fetch(url, ("application/json",))
+    _last_request = time.monotonic()
+    return json.loads(content)
+
+
+def cik_for(ticker: str) -> str:
+    rows = read_json(TICKERS)
+    wanted = ticker.strip().upper()
+    for row in rows.values():
+        if row["ticker"].upper() == wanted:
+            return pad(row["cik_str"])
+    raise ValueError(f"no CIK for ticker {ticker!r}")
+
+
+def filings(cik: str, form: str | None = None, limit: int = 10) -> list[Filing]:
+    """Recent filings, newest first, optionally only one form such as 10-K or 8-K."""
+    cik = pad(cik)
+    recent = read_json(SUBMISSIONS.format(cik=cik))["filings"]["recent"]
+    found = []
+    for i, value in enumerate(recent["form"]):
+        if form is not None and value != form:
+            continue
+        accession = recent["accessionNumber"][i]
+        document = recent["primaryDocument"][i]
+        found.append(Filing(
+            cik=cik, form=value, accession=accession,
+            filed_at=recent["filingDate"][i], period=recent["reportDate"][i] or None,
+            primary_document=document,
+            url=ARCHIVE.format(number=int(cik), folder=accession.replace("-", ""),
+                               document=document)))
+        if len(found) >= limit:
+            break
+    return found
+
+
+def facts(cik: str, tag: str, taxonomy: str = "us-gaap", unit: str = "USD") -> list[dict]:
+    """Every value the company filed for one XBRL tag, newest period first.
+
+    Each entry keeps the accession and the period so a claim can be tied to the filed figure
+    rather than to a number a model produced.
+    """
+    data = read_json(COMPANY_FACTS.format(cik=pad(cik)))
+    concept = data.get("facts", {}).get(taxonomy, {}).get(tag)
+    if concept is None:
+        return []
+    values = concept.get("units", {}).get(unit, [])
+    return sorted(values, key=lambda v: v.get("end", ""), reverse=True)
