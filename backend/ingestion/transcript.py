@@ -12,6 +12,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from backend.models import SourceSpan
+
 # Transcripts mark the end of prepared remarks in two ways: a heading the transcriber inserted,
 # or the moment someone hands the call to the operator. Both are matched, and the earliest wins.
 # The patterns are written to be wrong rarely rather than to fire often: on the calls that carry
@@ -80,12 +82,22 @@ def _speakers(path: Path, count: int) -> list[str | None]:
     return labels
 
 
+# A host often previews the agenda in the opening minute, saying the call will later open for
+# questions. That announcement matches the same wording as the handoff itself, so the last match
+# is taken rather than the first. A boundary that would still leave prepared remarks this short
+# is not believed at all, because an opening of a few sentences is the preview, not the handoff.
+MIN_PREPARED_SHARE = 0.25
+
+
 def qa_start(lines: list[str]) -> int | None:
     """Index of the first question-and-answer sentence, or None when the call does not mark it."""
-    for i, line in enumerate(lines):
-        if QA_MARKER.search(line):
-            return i + 1
-    return None
+    hits = [i for i, line in enumerate(lines) if QA_MARKER.search(line)]
+    if not hits:
+        return None
+    start = hits[-1] + 1
+    if lines and start < MIN_PREPARED_SHARE * len(lines):
+        return None
+    return start
 
 
 def read_call(dataset: Path, call_id: str, labels: Path | None = None) -> list[Sentence]:
@@ -127,3 +139,36 @@ def within_speaker_delta(sentences: list[Sentence], column: str) -> dict[int, fl
         if s.segment == QA and value is not None and s.speaker in means:
             deltas[s.index] = value - means[s.speaker]
     return deltas
+
+
+def speakers_in_prepared(sentences: list[Sentence]) -> set[str]:
+    """Labels that speak during prepared remarks.
+
+    Analysts do not speak before the operator opens the line, so on a call whose boundary was
+    found these labels are the company's own speakers. On a call with no boundary the set is
+    empty, because nothing distinguishes the two sides.
+    """
+    return {s.speaker for s in sentences if s.segment == PREPARED and s.speaker}
+
+
+def spans(sentences: list[Sentence], document_id: str | None = None
+          ) -> tuple[str, list[SourceSpan]]:
+    """Lay the call out as one text with one span per sentence, as the filing parser does.
+
+    Claim extraction reads spans, so a call has to be presented the same way a filing is. Each
+    span keeps the offsets of its sentence in the joined text, so a claim quote resolves back to
+    a position in the call.
+    """
+    document = document_id or (sentences[0].call_id if sentences else "")
+    parts, made, offset = [], [], 0
+    for s in sentences:
+        parts.append(s.text)
+        made.append(SourceSpan(id=f"{document}:{s.index}", document_id=document, kind="paragraph",
+                               text=s.text, start=offset, end=offset + len(s.text)))
+        offset += len(s.text) + 1
+    for i, span in enumerate(made):
+        if i:
+            made[i] = span.model_copy(update={"prev_id": made[i - 1].id})
+    for i, span in enumerate(made[:-1]):
+        made[i] = span.model_copy(update={"next_id": made[i + 1].id})
+    return "\n".join(parts), made

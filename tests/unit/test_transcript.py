@@ -1,7 +1,8 @@
 import pytest
 
 from backend.ingestion.transcript import (
-    PREPARED, QA, UNKNOWN, call_ids, qa_start, read_call, within_speaker_delta,
+    PREPARED, QA, UNKNOWN, call_ids, qa_start, read_call, spans,
+    speakers_in_prepared, within_speaker_delta,
 )
 
 TEXT = ["Revenue grew strongly.", "We will now begin the question-and-answer session.",
@@ -90,3 +91,45 @@ def test_the_handoff_to_the_operator_ends_prepared_remarks(line):
 ])
 def test_an_executive_saying_question_does_not_end_prepared_remarks(line):
     assert qa_start(["Revenue grew.", line, "Margins improved."]) is None
+
+
+def test_sentences_become_spans_whose_offsets_resolve(tmp_path):
+    data, labels = _call(tmp_path)
+    sentences = read_call(data, "20240101_TEST", labels)
+    text, made = spans(sentences)
+    assert len(made) == len(sentences)
+    for span, sentence in zip(made, sentences):
+        assert text[span.start:span.end] == sentence.text
+    # Claim extraction only reads these kinds, and the chain lets it look at neighbours.
+    assert {s.kind for s in made} == {"paragraph"}
+    assert made[0].prev_id is None and made[0].next_id == made[1].id
+    assert made[-1].next_id is None
+
+
+def test_only_the_company_speaks_before_the_line_opens(tmp_path):
+    data, labels = _call(tmp_path)
+    sentences = read_call(data, "20240101_TEST", labels)
+    # Person3 asks the first question, so it is not one of the company's speakers.
+    assert speakers_in_prepared(sentences) == {"Person1", "Person2"}
+
+
+def test_a_call_with_no_boundary_names_no_company_speaker(tmp_path):
+    data, labels = _call(tmp_path, text=["One.", "Two.", "Three.", "Four."])
+    assert speakers_in_prepared(read_call(data, "20240101_TEST", labels)) == set()
+
+
+def test_an_agenda_preview_does_not_end_prepared_remarks():
+    lines = ["Good afternoon.",
+             "And then we will open up the call for the question-and-answer session.",
+             *[f"Revenue in segment {i} grew." for i in range(20)],
+             "Operator, we are now ready to open the lines for questions.",
+             "What drove the margin?"]
+    # The preview is at index 1; the real handoff is near the end.
+    assert qa_start(lines) == 23
+
+
+def test_a_boundary_that_leaves_almost_no_prepared_remarks_is_not_believed():
+    lines = ["Good afternoon.",
+             "And then we will open up the call for the question-and-answer session.",
+             *[f"Sentence {i}." for i in range(30)]]
+    assert qa_start(lines) is None
