@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Callable
 
+from backend.assessment.accumulated import probability_for
 from backend.assessment.inflation import Axes, assess
 from backend.claims.extract import extract
 from backend.claims.features import puffery_density, specificity, specificity_score
@@ -40,6 +41,11 @@ class Row:
     evidence: list[dict] = field(default_factory=list)
     parts: dict[str, float] = field(default_factory=dict)
     note: str = ""
+    # Added when a scorer weighs the findings. It is not fitted to any outcome, so it says how
+    # the evidence adds up under a neutral prior and not how often such a claim turns out wrong.
+    probability: float | None = None
+    probability_basis: list[dict] = field(default_factory=list)
+    calibrated: bool = False
 
 
 def _verdict(axes: Axes, stances: list[str]) -> str:
@@ -59,6 +65,7 @@ def row_for(claim: Claim, *, speaker: str | None, segment: str, cik: str,
             sections: dict[str, Section], period: str | None = None,
             accession: str | None = None, source_url: str | None = None,
             turn: str | None = None, call_date: str | None = None,
+            scorer=None, manifest: RunManifest | None = None,
             prior: dict[str, Section] | None = None,
             embed: Callable[[list[str]], list[list[float]]] | None = None) -> Row:
     """One row for one claim.
@@ -121,6 +128,9 @@ def row_for(claim: Claim, *, speaker: str | None, segment: str, cik: str,
             hedging = None
     # Every agent that took a side, not just the one that reads filed figures.
     axes = assess(claim, [e.get("stance", "") for e in evidence], hedging)
+    belief = None
+    if scorer is not None and manifest is not None:
+        belief = probability_for(claim, evidence, scorer, manifest)
     return Row(
         claim_id=claim.id, claim=claim.text, speaker=speaker, segment=segment,
         claim_type=str(claim.assertion_type), specificity=specificity_score(claim),
@@ -128,6 +138,10 @@ def row_for(claim: Claim, *, speaker: str | None, segment: str, cik: str,
         puffery_per_100w=round(puffery_density(claim.text), 2),
         rhetorical_inflation=axes.rhetorical_inflation, evidence_gap=axes.evidence_gap,
         verdict=_verdict(axes, [check.stance]), evidence=evidence, parts=axes.parts,
+        probability=None if belief is None else round(belief.raw_probability, 4),
+        probability_basis=[] if belief is None else
+        [{"group": c.group_id, "log_evidence": c.log_evidence, "basis": c.short_basis}
+         for c in belief.contributions],
         note=axes.reason or ("no filing passage was close to the claim" if not matches else ""))
 
 

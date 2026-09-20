@@ -48,9 +48,10 @@ def catalogue(traces: Path | str = TRACES) -> list[dict]:
 def as_ledger(call_id: str, rows: list[dict], sentences: int) -> dict:
     """Turn the rows one run produced into the shape the reader reads.
 
-    `probability` stays null. Nothing here is fitted to an outcome, and the few restatement
-    events the corpus joins to cannot calibrate one, so a number in that field would read as a
-    likelihood that it is not.
+    `probability` is the accumulated score when a scorer weighed the findings, and null when
+    none did. `calibrated` stays false either way: nothing is fitted to an outcome, and of the
+    claims read so far only a handful could be settled against a filed figure, none of which
+    disagreed. The number says how the evidence adds up, not how often such a claim is wrong.
     """
     claims = []
     for row in rows:
@@ -63,7 +64,8 @@ def as_ledger(call_id: str, rows: list[dict], sentences: int) -> dict:
             "hedgingDelta": row.get("parts", {}).get("gap.hedging_delta", 0.0),
             "rhetoricalInflation": round(100 * row["rhetorical_inflation"], 1),
             "evidenceGap": None if gap is None else round(100 * gap, 1),
-            "probability": None,
+            "probability": row.get("probability"),
+            "probabilityBasis": row.get("probability_basis", []),
             "verdict": VERDICTS.get(row["verdict"], "abstain"),
             "evidence": [{
                 "agent": e["agent"], "tier": e["tier"], "stance": e["stance"],
@@ -79,4 +81,6 @@ def as_ledger(call_id: str, rows: list[dict], sentences: int) -> dict:
         "evidenceItems": sum(len(c["evidence"]) for c in claims),
         "abstainRate": round(abstained / len(claims), 3) if claims else 0.0,
         "calibrated": False,
+        "calibrationNote": ("no curve is fitted: too few claims can be settled against a "
+                            "filed figure, and none of those disagreed"),
     }

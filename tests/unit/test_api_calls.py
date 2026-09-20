@@ -45,7 +45,16 @@ def test_a_claim_nothing_was_found_for_carries_no_gap():
     assert claim["evidenceGap"] is None and claim["verdict"] == "abstain"
 
 
-def test_no_probability_is_reported():
+def test_a_row_without_a_score_reports_no_probability():
     ledger = calls.as_ledger("c", [ROW], sentences=10)
-    assert ledger["calibrated"] is False
+    assert ledger["calibrated"] is False and "no curve is fitted" in ledger["calibrationNote"]
     assert all(c["probability"] is None for c in ledger["claims"])
+
+
+def test_an_accumulated_score_reaches_the_reader_marked_uncalibrated():
+    row = {**ROW, "probability": 0.82,
+           "probability_basis": [{"group": "g0", "log_evidence": 1.5, "basis": "filed differs"}]}
+    ledger = calls.as_ledger("c", [row], sentences=10)
+    [claim] = ledger["claims"]
+    assert claim["probability"] == 0.82 and claim["probabilityBasis"][0]["basis"] == "filed differs"
+    assert ledger["calibrated"] is False

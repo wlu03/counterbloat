@@ -1,5 +1,5 @@
 from backend.ingestion.sections import MD_AND_A, RISK_FACTORS, Section
-from backend.models import AssertionType, Claim, SourceSpan
+from backend.models import AssertionType, Claim, Mode, RunManifest, SourceSpan
 from backend.orchestration import overstatement
 from backend.verification import xbrl
 
@@ -194,3 +194,30 @@ def test_a_length_floor_drops_short_passages_and_zero_keeps_them():
     assert len(overstatement.company_spans(spans, sentences, {"P1"}, min_chars=0)) == 2
     assert [s.id for s in overstatement.company_spans(spans, sentences, {"P1"}, min_chars=40)] \
         == ["call:1"]
+
+
+def test_a_scorer_adds_an_accumulated_probability_and_its_basis(monkeypatch):
+    from backend.providers.base import EvidenceScoreDraft
+    _stub(monkeypatch)
+
+    class Scorer:
+        def score_evidence(self, target, claim, evidence, related):
+            return EvidenceScoreDraft(log_evidence=1.5, supporting_evidence_ids=[],
+                                      short_basis="the filed figure differs")
+
+    manifest = RunManifest(analysis_id="p", mode=Mode.live, config_hash="p")
+    row = overstatement.row_for(_claim("Demand for our product is strong."), speaker="P1",
+                                segment="prepared", cik="0000012345", sections=SECTIONS,
+                                accession="a", scorer=Scorer(), manifest=manifest)
+    assert row.probability is not None and row.probability > 0.5
+    assert row.probability_basis and row.probability_basis[0]["basis"]
+    # Nothing here is fitted to an outcome.
+    assert row.calibrated is False
+
+
+def test_without_a_scorer_no_probability_is_invented(monkeypatch):
+    _stub(monkeypatch)
+    row = overstatement.row_for(_claim("Demand for our product is strong."), speaker="P1",
+                                segment="prepared", cik="0000012345", sections=SECTIONS,
+                                accession="a")
+    assert row.probability is None and row.probability_basis == []
