@@ -61,3 +61,16 @@ def test_a_claim_with_nothing_in_common_matches_nothing():
 def test_short_passages_are_not_candidates():
     sections = _sections(**{RISK_FACTORS: ["Demand may fall."]})
     assert risk_matcher.match(CLAIM, sections) == []
+
+
+def test_the_search_can_be_limited_to_chosen_passages():
+    everything = risk_matcher.match(CLAIM, SECTIONS, k=5)
+    assert len(everything) > 1
+    # Restricted to one passage, only that passage can be returned.
+    only = {everything[-1].span_id}
+    limited = risk_matcher.match(CLAIM, SECTIONS, k=5, only=only)
+    assert [m.span_id for m in limited] == list(only)
+
+
+def test_limiting_to_nothing_returns_nothing():
+    assert risk_matcher.match(CLAIM, SECTIONS, only=set()) == []

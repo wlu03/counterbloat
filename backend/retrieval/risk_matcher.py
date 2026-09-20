@@ -69,9 +69,15 @@ def candidates(sections: dict[str, Section], items=READ, min_words: int = 12):
 
 def match(claim: Claim, sections: dict[str, Section], *, accession: str | None = None,
           source_url: str | None = None, embed: Callable[[list[str]], list[list[float]]] | None = None,
-          k: int = 5, items=READ) -> list[Match]:
-    """The k passages closest to the claim, best first. An empty list means nothing was close."""
-    found = list(candidates(sections, items))
+          k: int = 5, items=READ, only: set[str] | None = None) -> list[Match]:
+    """The k passages closest to the claim, best first. An empty list means nothing was close.
+
+    `only` limits the search to particular passages, such as the ones the filing added this year.
+    Almost all of a risk factor section is carried over from the previous filing, and wording that
+    was already there before the claim was made cannot be the filing answering that claim.
+    """
+    found = [(item, span) for item, span in candidates(sections, items)
+             if only is None or span.id in only]
     if not found:
         return []
     vectors: list[list[float]] = []
