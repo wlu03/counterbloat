@@ -262,6 +262,8 @@ def main() -> None:
     parser.add_argument("--dataset", choices=sorted(VERIFICATION))
     parser.add_argument("--system", choices=["A1", *ABLATIONS], default="A2")
     parser.add_argument("--updater", choices=["linguistic", "full_context", "evidence_accumulator"])
+    parser.add_argument("--updater-samples", type=int,
+                        help="how many times the updater is asked before its status is taken")
     parser.add_argument("--jev", action="store_true")
     parser.add_argument("--limit", type=int, default=2000)
     parser.add_argument("--seed", type=int, help="take a random sample of --limit rows, not the first")
@@ -288,6 +290,8 @@ def main() -> None:
     settings = load_settings("config/evaluation.yaml")
     if args.updater:
         settings.assessment.updater = args.updater
+    if args.updater_samples:
+        settings.assessment.updater_samples = args.updater_samples
     router = compressor = None
     if args.jev or args.system in ("A3", "A5"):
         from backend.providers.jev import JevRouter
@@ -306,6 +310,8 @@ def main() -> None:
         def one(row, factory):
             return verify(row, factory, sources, task, args.system, settings, router, compressor)
     out.with_suffix(".meta.json").write_text(json.dumps({
+        "updater": settings.assessment.updater,
+        "updater_samples": settings.assessment.updater_samples,
         "command": args.command, "system": args.system, "jev": bool(router),
         "commit": current_commit(), "config": settings.config_hash(),
         "max_calls": args.max_calls, "limit": args.limit, "seed": args.seed}, indent=2))
