@@ -37,6 +37,10 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
   passages, combine them in the same order with the same operations, and offer the same result
   to the claim. `divide(a, b)` and `divide(b, a)` are different calculations. A program that
   failed to execute does not block a later program over the same numbers.
+- The order of a step's arguments is stated to the model, in the prompt and in the schema:
+  `pct_change` and `reduction` take the earlier period first, `share` takes the part then the
+  whole, and `subtract`, `divide` and `compare` take the left operand first. Before this was
+  stated, the model guessed, and a reversed `pct_change` was rejected on the worked example.
 - A claim that states a bound, such as "at least 40%" or "below 5%", is tested against the bound
   and not for equality. A bound counts only where it is written beside the number it bounds. A
   claim that states two endpoints, and a result whose sign convention differs from the claim's,
@@ -54,7 +58,17 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
 - Each evidence item keeps the analyst's own reading in `judged` beside the `relationship` a
   difference of basis rewrote, so the updater reads both.
 - The updater is asked `assessment.updater_samples` times and the status its samples agree on
-  most often is used. It is 1 by default and 3 in `config/evaluation.yaml`.
+  most often is used. It is 1 by default and 3 in `config/evaluation.yaml`, and a run can set it
+  with `--updater-samples`. Its effect has not been isolated from the other changes it shipped
+  with.
+- A labelled dataset states the protocol by which its claims are decided, and both the pipeline
+  and the one-search baseline are given the same one, so a comparison between them measures the
+  structure and not the protocol. The protocol names no label for any particular claim.
+- The updater is told when the evidence is enough to decide: `insufficient` is for a claim that
+  nothing admitted bears on, and a calculation whose `claim_relation` is `agrees` or `disagrees`
+  bears on it. A status of `insufficient` or `not_yet_resolvable` carries no overstatement
+  mechanism, because those statuses conclude nothing about the claim; a mechanism named beside
+  one is dropped. The model named three on the worked example while answering `insufficient`.
 - A verdict needs admitted, comparable evidence about the claim in its own direction, or a
   calculation whose result code compared with the value the claim states. A calculation that
   answers a side question does not justify a verdict. Otherwise the status becomes
