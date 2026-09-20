@@ -114,3 +114,56 @@ def test_parts_with_different_populations_can_be_added_but_not_compared():
     assert total.outputs["change"] == Decimal("-20")
     with pytest.raises(CalculationError, match="different population"):
         execute("n", "c", inputs, [CalcStep(op="pct_change", args=["east23", "west25"], out="x")])
+
+
+def test_a_figure_is_read_as_a_document_writes_it():
+    from backend.verification.numeric import parse_number
+
+    assert parse_number("$ 50") == parse_number("$50") == parse_number("50") == Decimal(50)
+    assert parse_number("US$ 1,234.5") == Decimal("1234.5")
+    # A filing writes a negative in brackets, and FinQA's tables write it twice.
+    assert parse_number("(32)") == parse_number("( 32 )") == Decimal(-32)
+    assert parse_number("-32 ( 32 )") == Decimal(-32)
+    assert parse_number("12.5%") == Decimal("12.5")
+    with pytest.raises(CalculationError):
+        parse_number("about fifty")
+
+
+def test_a_bracketed_negative_in_a_passage_is_found_by_its_signed_value():
+    span = SourceSpan(id="s", document_id="d", kind="table_row", start=0, end=40,
+                      text="waterford 3 replacement steam generator provision | amount: -32 ( 32 )")
+    assert value_in_source(Decimal(-32), span) and value_in_source(Decimal(32), span)
+
+
+def test_a_step_may_name_a_scale_factor_but_no_other_number():
+    def value(name, number, unit):
+        return CalcInput(name=name, value=Decimal(number), unit=unit, source_span_id="s")
+
+    # FinQA's own programs convert to millions this way: multiply(1211143, 308.10) / const_1000000.
+    shares = [value("count", "1211143", "shares"), value("price", "308.10", "USD/share")]
+    result = execute("n", "c", shares, [CalcStep(op="multiply", args=["count", "price"], out="total"),
+                                        CalcStep(op="divide", args=["total", "const_1000000"], out="millions")])
+    assert result.outputs["millions"] == Decimal("373.153158300")
+    # Dividing by a scale factor changes the scale, not the unit.
+    assert result.units["millions"] == result.units["total"] == "USD"
+    with pytest.raises(CalculationError, match="unknown or too few arguments"):
+        execute("n", "c", shares, [CalcStep(op="divide", args=["count", "const_7"], out="x")])
+    # An input of the same name is a document figure and wins over the factor.
+    own = [value("const_1000", "42", "t"), value("other", "2", "t")]
+    assert execute("n", "c", own, [CalcStep(op="add", args=["const_1000", "other"], out="s")]).outputs["s"] == 44
+
+
+def test_a_scale_factor_can_be_added_to_a_value_but_two_real_units_still_cannot():
+    def value(name, number, unit):
+        return CalcInput(name=name, value=Decimal(number), unit=unit, source_span_id="s")
+
+    # The growth idiom: revenue divided by (1 + growth) recovers the earlier year.
+    inputs = [value("rev17", "6.22", "billion dollars"), value("growth", "7", "percent")]
+    steps = [CalcStep(op="divide", args=["growth", "const_100"], out="fraction"),
+             CalcStep(op="add", args=["const_1", "fraction"], out="factor"),
+             CalcStep(op="divide", args=["rev17", "factor"], out="rev16")]
+    result = execute("n", "c", inputs, steps)
+    assert result.outputs["rev16"].quantize(Decimal("0.001")) == Decimal("5.813")
+    with pytest.raises(CalculationError, match="incompatible units in add"):
+        execute("n", "c", [value("a", "1", "tonnes"), value("b", "2", "kg")],
+                [CalcStep(op="add", args=["a", "b"], out="x")])

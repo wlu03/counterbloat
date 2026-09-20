@@ -15,7 +15,8 @@ from backend.models import (
 )
 from backend.providers import prompts
 from backend.providers.base import (
-    ClaimDraft, ClaimDrafts, EvidenceAnalysis, EvidenceScoreDraft, ProviderError, QuestionDraft,
+    ClaimDraft, ClaimDrafts, DirectAnswer, EvidenceAnalysis, EvidenceScoreDraft, ProgramDraft,
+    ProviderError, QuestionDraft,
     QuestionDrafts, Reassessment, Report, ReviewResult, StateUpdate,
 )
 
@@ -80,6 +81,14 @@ class OpenAILLM:
     def structure_claim(self, text: str, span: SourceSpan) -> ClaimDraft:
         payload = {"claim": text, "passage": span.text}
         return self._parse("structure", self.extract_model, prompts.STRUCTURER, payload, ClaimDraft)
+
+    def propose_program(self, question: str, context: str) -> ProgramDraft:
+        payload = {"question": question, "passages": context}
+        return self._parse("program", self.reason_model, prompts.CALCULATOR, payload, ProgramDraft)
+
+    def answer_directly(self, question: str, context: str) -> DirectAnswer:
+        payload = {"question": question, "passages": context}
+        return self._parse("direct", self.reason_model, prompts.DIRECT, payload, DirectAnswer)
 
     def plan_questions(self, claim: Claim, checklist: list[str]) -> list[QuestionDraft]:
         payload = {"claim": claim.model_dump(mode="json"), "checklist": checklist}

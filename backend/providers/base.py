@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal, Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.models import (
     AnswerStatus, AssertionType, CalcStep, Calculation, Claim, EvidenceItem, EvidenceOrigin,
@@ -80,6 +80,13 @@ class ProgramDraft(BaseModel):
     claim_expected: str | None
 
 
+class DirectAnswer(BaseModel):
+    """One number answering a question, with the figures the model says it used."""
+    answer: str = Field(description="The answer as a plain number, with no unit or sign words")
+    inputs: list[InputDraft] = Field(description="Each figure used, with the span id it came from")
+    note: str
+
+
 class QuestionAnswer(BaseModel):
     question_id: str
     status: AnswerStatus
@@ -140,6 +147,8 @@ class Compressed(BaseModel):
 class LLM(Protocol):
     def extract_claims(self, span: SourceSpan, context: list[SourceSpan]) -> list[ClaimDraft]: ...
     def structure_claim(self, text: str, span: SourceSpan) -> ClaimDraft: ...
+    def propose_program(self, question: str, context: str) -> ProgramDraft: ...
+    def answer_directly(self, question: str, context: str) -> DirectAnswer: ...
     def plan_questions(self, claim: Claim, checklist: list[str]) -> list[QuestionDraft]: ...
     def analyze_evidence(self, claim: Claim, questions: list[VerificationQuestion],
                          context: str) -> EvidenceAnalysis: ...

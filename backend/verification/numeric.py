@@ -11,17 +11,36 @@ OPS = SAME_UNIT_OPS | {"multiply", "divide"}
 # Operations that compare two values of one measure. Both values must cover the same population
 # and boundary. Adding parts to a total, or taking a part as a share of its whole, does not.
 SAME_SCOPE_OPS = {"compare", "pct_change", "reduction"}
+# Scale factors a step may name. They convert a unit, such as dollars to millions of dollars, and
+# they carry no unit of their own. They are not figures read from a document, so they need no
+# source, and the list is fixed so a program cannot introduce a value of its own this way.
+CONSTANTS = {"const_1": Decimal(1), "const_10": Decimal(10), "const_100": Decimal(100),
+             "const_1000": Decimal(1000), "const_1000000": Decimal(1_000_000),
+             "const_1000000000": Decimal(1_000_000_000)}
 
 
 class CalculationError(Exception):
     pass
 
 
+_CURRENCY = re.compile(r"(?:US|C|A|HK)?[$€£¥]")
+
+
 def parse_number(text: str) -> Decimal:
+    """Read a figure as a document writes it.
+
+    A filing puts the currency symbol beside the number and writes a negative in brackets.
+    FinQA's tables write a negative twice, as "-32 ( 32 )", where the first form is signed.
+    """
+    cleaned = _CURRENCY.sub("", text).replace(",", "").replace("%", "").strip()
+    written, negative = cleaned.split("(")[0].strip(), False
+    if not written and cleaned.startswith("(") and cleaned.rstrip().endswith(")"):
+        written, negative = cleaned.strip()[1:-1].strip(), True
     try:
-        return Decimal(text.replace(",", "").replace("%", "").strip())
+        value = Decimal(written)
     except InvalidOperation as exc:
         raise CalculationError(f"not a number: {text!r}") from exc
+    return -value if negative else value
 
 
 def value_in_source(value: Decimal, span: SourceSpan) -> bool:
@@ -43,6 +62,8 @@ def _unit_product(a: str, b: str) -> str:
             numerator, denominator = rate.rsplit("/", 1)
             if _words(denominator) and _words(denominator) <= _words(other):
                 return numerator.strip()
+    if not a or not b:
+        return a or b  # multiplying by a scale factor changes the scale, not the unit
     if "/" in a or "/" in b:
         raise CalculationError(f"incompatible units in multiply: {a}, {b}")
     return f"{a}*{b}"
@@ -88,6 +109,12 @@ def execute(calc_id: str, claim_id: str, inputs: list[CalcInput], steps: list[Ca
     units = {i.name: i.unit for i in inputs}
     scope = {i.name: (i.population, i.boundary) for i in inputs}
     periods = {i.name: i.period for i in inputs}
+    for name, factor in CONSTANTS.items():
+        # An input of the same name wins, so a document figure is never shadowed by a constant.
+        values.setdefault(name, factor)
+        units.setdefault(name, "")
+        scope.setdefault(name, (None, None))
+        periods.setdefault(name, None)
     for step in steps:
         if step.op not in OPS:
             raise CalculationError(f"operation not allowed: {step.op}")
@@ -96,7 +123,11 @@ def execute(calc_id: str, claim_id: str, inputs: list[CalcInput], steps: list[Ca
             raise CalculationError(f"unknown or too few arguments: {step.args}")
         args = [values[a] for a in step.args]
         if step.op in SAME_UNIT_OPS:
-            if len({units[a] for a in step.args}) > 1:
+            # A scale factor carries no unit and takes the unit of what it is combined with, so
+            # "1 + growth" is allowed. Two figures that do carry units must still agree.
+            named = {units[a] for a in step.args if units[a]}
+            shared_unit = next(iter(named), "")
+            if len(named) > 1:
                 raise CalculationError(f"incompatible units in {step.op}: "
                                        f"{[units[a] for a in step.args]}")
             scopes = {scope[a] for a in step.args if a in scope and any(scope[a])}
@@ -112,9 +143,9 @@ def execute(calc_id: str, claim_id: str, inputs: list[CalcInput], steps: list[Ca
                 # The first argument is the base. A later base reverses the sign and the ratio.
                 raise CalculationError(f"{step.op} has the later period first: {base}, {later}")
         if step.op in ("add", "sum"):
-            result, unit = sum(args, Decimal(0)), units[step.args[0]]
+            result, unit = sum(args, Decimal(0)), shared_unit
         elif step.op == "subtract":
-            result, unit = x0 - x1, units[step.args[0]]
+            result, unit = x0 - x1, shared_unit
         elif step.op == "multiply":
             first, second = periods.get(step.args[0]), periods.get(step.args[1])
             if first and second and first != second:
@@ -123,8 +154,10 @@ def execute(calc_id: str, claim_id: str, inputs: list[CalcInput], steps: list[Ca
         elif step.op == "divide":
             if x1 == 0:
                 raise CalculationError("division by zero")
-            same = units[step.args[0]] == units[step.args[1]]
-            result, unit = x0 / x1, "ratio" if same else f"{units[step.args[0]]}/{units[step.args[1]]}"
+            over, under = units[step.args[0]], units[step.args[1]]
+            # Dividing by a scale factor changes the scale, not the unit.
+            result = x0 / x1
+            unit = over if not under else "ratio" if over == under else f"{over}/{under}"
         elif step.op == "pct_change":
             if x0 == 0:
                 raise CalculationError("percentage change from zero")
@@ -138,7 +171,7 @@ def execute(calc_id: str, claim_id: str, inputs: list[CalcInput], steps: list[Ca
                 raise CalculationError("reduction needs a positive base")
             result, unit = (1 - x1 / x0) * 100, "%"
         else:  # compare: positive when the first value is larger
-            result, unit = x0 - x1, units[step.args[0]]
+            result, unit = x0 - x1, shared_unit
         values[step.out], units[step.out] = result, unit
     outputs = {s.out: values[s.out] for s in steps}
     return Calculation(id=calc_id, claim_id=claim_id, inputs=inputs, steps=steps, outputs=outputs,
