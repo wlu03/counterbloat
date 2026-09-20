@@ -259,6 +259,35 @@ prediction into a correct abstention and one correct prediction into a wrong one
 others are claims the pipeline committed to in the wrong direction, which abstaining does not
 fix.
 
+### Two defects found by running one claim through the live pipeline (2026-09-20)
+
+This is one document and one claim, not a dataset result. It is recorded because each defect was
+invisible in the aggregates and neither was in the external audit.
+
+The document states "We reduced our total operational emissions by 40% in 2025 compared with
+2024", gives per-unit emissions of 10 and 6 kg CO2e/unit and production of 1,000 and 2,000 units,
+and carries a footnote saying the figures cover the bottle body only.
+
+First run: every calculation was rejected with `pct_change has the later period first: 2025,
+2024`, three times, and the finding had no calculations. The calculator requires the earlier
+period as the first argument and nothing told the model so, so it guessed. After the order was
+stated in the prompt and the schema, the rejections stopped and the program ran:
+10 x 1,000 = 10,000 against 6 x 2,000 = 12,000, a 20% rise against a stated 40% fall,
+`claim_relation` `disagrees`.
+
+Second run: the updater answered `insufficient` while naming `scope`,
+`selective_comparison` and `omitted_qualification`, and while holding that disagreeing
+calculation. Naming a mechanism is a conclusion, so the answer contradicted itself. After the
+updater was told that a calculation which agrees or disagrees does bear on the claim, it proposed
+`contradicted`, and a status that concludes nothing now carries no mechanism.
+
+Third run: the reviewer narrowed `contradicted` to `insufficient`, because the passages do not
+establish that a per-unit figure covers the same scopes and boundary as "total operational
+emissions". The document's own footnote says they do not, so the narrowing is correct, and
+`interpretation_ambiguity` records the reason: the evidence supports a fall in intensity, not in
+absolute total emissions. The abstention here is the reviewer's, and it is the right answer for
+this document.
+
 ### What the pipeline costs and where it loses (2026-09-20)
 
 Measured on 40 QuanTemp claims and 60 CLIMATE-FEVER claims, seed 5, against A1, the one-search
