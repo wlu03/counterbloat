@@ -18,8 +18,9 @@ from backend.evidence.ledger import admissible
 from backend.evidence.provenance import lineage, reconcile
 from backend.ingestion.snapshot import admit
 from backend.models import (
-    AnswerStatus, Calculation, CalcInput, Claim, DocumentSnapshot, EvidenceItem, InvestigationState, Mode,
-    ProviderCall, Relationship, RunManifest, ScoringTarget, SourceSpan, VerificationQuestion,
+    AnswerStatus, Calculation, CalcInput, Claim, DocumentSnapshot, EvidenceItem, EvidenceStatus,
+    InvestigationState, Mode, ProviderCall, Relationship, RunManifest, ScoringTarget, SourceSpan,
+    VerificationQuestion,
 )
 from backend.planning import checklists
 from backend.planning.checklists import plan
@@ -73,6 +74,23 @@ WHOLE_WHEN_UNSTATED = ("denominator", "population", "boundary")
 # Passage kinds that carry the qualification a figure depends on: what a total excludes, which
 # sites it covers, which period a column is. They are never put in compressible background.
 QUALIFYING_KINDS = ("footnote", "table_row", "caption")
+# How much a status concludes. A review may not move a claim up this order, because only the
+# evidence and the verdict gate can. What it can do is say what to look for.
+CONCLUDES = {EvidenceStatus.insufficient: 0, EvidenceStatus.not_yet_resolvable: 0,
+             EvidenceStatus.mixed: 1, EvidenceStatus.supported: 2,
+             EvidenceStatus.contradicted: 2}
+
+
+def _asks_for_more(review, status) -> bool:
+    """True when the review wants a firmer conclusion than the investigation reached.
+
+    Such a review used to be dropped: `finalize` applies a narrowing only towards a weaker
+    status. The request itself is still information about what is missing, so it becomes a check
+    and gets the follow-up rounds. The verdict gate still decides what the evidence earns.
+    """
+    if review is None or review.decision != "narrow" or review.narrowed_status is None:
+        return False
+    return CONCLUDES.get(review.narrowed_status, 0) > CONCLUDES.get(status, 0)
 
 
 def _differences(differs_on: list[str], claim: Claim, span_id: str,
@@ -376,8 +394,9 @@ def run_analysis(analysis_id: str, deps: Deps) -> None:
                 return
             review = run_review(state, seen, llm, manifest)
             # A reason with a number found in no source is not turned into a question.
+            wants_more = _asks_for_more(review, state.assessment.status)
             checks = [r for r in review.reasons if numbers_supported(r, state, seen)] \
-                if review and review.decision == "request_check" else []
+                if review and (review.decision == "request_check" or wants_more) else []
             if checks and settings.max_follow_up_rounds:
                 # Each requested check becomes a critical question that is searched for first.
                 asked = [VerificationQuestion(

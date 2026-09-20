@@ -65,6 +65,9 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
   still open, or while nothing was retrieved at all. The query names the questions being worked
   on, and each query is asked once per investigation. Where a passage came from does not say
   whether the questions are answered, so it does not decide this.
+- A review cannot grant a verdict, because only evidence passing the verdict gate can. A review
+  that asks for a firmer conclusion than the investigation reached is treated as a request for a
+  check, so what it says is missing is searched for instead of discarded.
 - When the review asks for a check, the request becomes a critical question and gets at most
   `max_follow_up_rounds` further rounds, then a second review. A check that was still not
   completed is listed in the finding. The report is written from the reviewed assessment.
@@ -154,9 +157,11 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
   refuses automated requests. Documents from a site that refuses the fetcher must be uploaded.
 - Text made block-level only by CSS is joined without a space. A claim that appears only in a
   table cell is not extracted, because table rows are evidence passages, not claim candidates.
-- A review rejection always produces `insufficient`. When the review objects that an assessment
-  is too weak, its objection cannot raise the status. The comparison in
-  `docs/evaluation_protocol.md` has one case that is wrong for this reason.
+- A review rejection always produces `insufficient`, so a reviewer who rejects an assessment for
+  being too weak still weakens it. The comparison in `docs/evaluation_protocol.md` has one case
+  that is wrong for this reason. A reviewer who instead narrows towards a firmer status no longer
+  has that request dropped: it becomes a critical question and gets the follow-up rounds, and the
+  verdict gate then decides what the evidence earns.
 - No path in the code raises an assessment. The updater proposes a status and every later stage
   (the comparability rule, the verdict gate, the reviewer) can only weaken it. On the measured
   runs this is mostly not what abstains: of 53 abstentions the updater proposed `insufficient`

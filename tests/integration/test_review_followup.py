@@ -146,3 +146,36 @@ def test_one_keyword_only_search_marks_the_whole_analysis(store):
 
     _run(store, FakeLLM, index=Flaky(), retrieval=Retrieval(show_whole_corpus_under=0))
     assert Flaky.searches > 2 and store.get("manifests", "an-1")["embedding_search"] is False
+
+
+def test_a_review_that_wants_a_firmer_verdict_gets_a_check_rather_than_nothing(store):
+    """`finalize` applies a narrowing only downwards, so upwards used to be dropped in silence."""
+    WANTED = "Confirm whether the inventory covers every site."
+    searched, reviews = [], []
+
+    class WantsMore(FakeLLM):
+        def update_state(self, state, new_evidence_ids, new_calculation_ids):
+            update = super().update_state(state, new_evidence_ids, new_calculation_ids)
+            update.status, update.mechanisms = EvidenceStatus.insufficient, []
+            return update
+
+        def review(self, state, decisive):
+            reviews.append(len(state.questions))
+            if len(reviews) == 1:
+                # The reviewer thinks the evidence earns a verdict. It cannot grant one.
+                return ReviewResult(decision="narrow", narrowed_status="contradicted",
+                                    reasons=[WANTED])
+            return ReviewResult(decision="accept", narrowed_status=None, reasons=[])
+
+    class Recording(MemoryIndex):
+        def search(self, query, **options):
+            searched.append(query)
+            return super().search(query, **options)
+
+    job, [finding] = _run(store, WantsMore, index=Recording())
+    assert job["status"] == "complete"
+    # The request became a critical question, was searched for, and a second review followed.
+    assert len(reviews) == 2 and reviews[1] > reviews[0]
+    assert any(WANTED in q for q in searched)
+    # The gate still decides: the follow-up found nothing to earn a verdict, so it stays.
+    assert finding.evidence_status == EvidenceStatus.insufficient
