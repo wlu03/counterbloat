@@ -110,6 +110,14 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
 - A review rejection always produces `insufficient`. When the review objects that an assessment
   is too weak, its objection cannot raise the status. The comparison in
   `docs/evaluation_protocol.md` has one case that is wrong for this reason.
+- No path in the code raises an assessment. The updater proposes a status and every later stage
+  (the comparability rule, the verdict gate, the reviewer) can only weaken it. On the measured
+  runs this is mostly not what abstains: the updater proposed `insufficient` in 49 of 53
+  abstentions, and the gate accounted for 4.
+- Measured against a one-search one-judgment baseline on QuanTemp and CLIMATE-FEVER, the pipeline
+  commits to fewer claims and is less often right when it commits. See
+  `docs/evaluation_protocol.md`. What it does give is grounding: on FinQA every figure it used
+  was verifiably in the passage it cited.
 - No result has been measured on any dataset. No dataset file is present in this repository.
   FinQA and FinanceBench are questions, not claims, so the verification runner does not take
   them. GreenClaims accusations are annotations, not adjudicated labels, so no metric is

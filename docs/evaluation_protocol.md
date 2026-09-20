@@ -237,6 +237,39 @@ How to read this:
 - One run per case does not measure run-to-run variation. The pipeline gave `mixed` and then
   `insufficient` for the same case in two runs. Use `--repeats 3` for that measure.
 
+### What the pipeline costs and where it loses (2026-09-20)
+
+Measured on 40 QuanTemp claims and 60 CLIMATE-FEVER claims, seed 5, against A1, the one-search
+one-judgment baseline. `coverage` is the share of claims a system commits to rather than
+answering `insufficient`. `floor` is what a system scores by ignoring the evidence and always
+answering the most common gold label.
+
+| run | agreement | coverage | right when committed | floor |
+|---|---|---|---|---|
+| QuanTemp baseline | 15% | 35% | 43% | 60% |
+| QuanTemp pipeline | 2% | 20% | 12% | 60% |
+| CLIMATE-FEVER baseline | 40% | 35% | 57% | 37% |
+| CLIMATE-FEVER pipeline | 27% | 23% | 14% | 37% |
+
+The pipeline is not trading coverage for precision on these two datasets. It commits less often
+and is less often right when it does. On QuanTemp both systems are below the floor, so that
+dataset says little; on CLIMATE-FEVER the baseline beats the floor and the pipeline does not.
+
+Where the abstentions come from, now that each stage records what it proposed: of the 53
+abstentions in the CLIMATE-FEVER run, the updater itself proposed `insufficient` 49 times. The
+verdict gate demoted a verdict 4 times. Tuning the gate or the comparability rule therefore
+cannot move most of this; the updater's own judgment is what abstains.
+
+Two changes measured against this: normalising a supplied claim the way its document was parsed
+recovered the claims that were silently dropped (3 of 60 to 1 of 60, and offline 121 of 1535
+CLIMATE-FEVER claims were affected). Showing a small corpus whole instead of searching it made
+the result worse, lowering coverage from 23% to 12%, and is off by default.
+
+On FinQA, where the calculator is available and both arms answer every question, 60 examples at
+seed 3: the program arm reaches 80% with every cited figure verifiably in the passage it cites
+(128 of 128), against 82% for a single prompt at 99% (132 of 133). The structure buys grounding
+and a re-executable program, not a better answer.
+
 ## Report
 
     uv run python -m evaluation.report results --out results/report.md
