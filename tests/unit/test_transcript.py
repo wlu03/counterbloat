@@ -2,7 +2,8 @@ import pytest
 
 from backend.ingestion.transcript import (
     PREPARED, QA, UNKNOWN, call_ids, qa_start, read_call, spans,
-    speakers_in_prepared, turn_holding, turns, within_speaker_delta,
+    speakers_in_prepared, speech_rate_delta, turn_holding, turns,
+    within_speaker, within_speaker_delta,
 )
 
 TEXT = ["Revenue grew strongly.", "We will now begin the question-and-answer session.",
@@ -157,3 +158,20 @@ def test_the_turn_holding_a_sentence_is_found(tmp_path):
     grouped = turns(read_call(data, "20240101_TEST", labels))
     assert turn_holding(grouped, 2).speaker == "Person3"
     assert turn_holding(grouped, 99) is None
+
+
+def test_speech_rate_is_measured_against_the_speakers_own_prepared_pace(tmp_path):
+    # Person1 speaks at 1.5 words a second prepared, then 4 words a second in the answer.
+    data, labels = _call(tmp_path, features=("Mean pitch,Audio Length\n120.0,2.0\n110.0,3.0\n"
+                                             "130.0,1.5\n180.0,1.0\n"))
+    sentences = read_call(data, "20240101_TEST", labels)
+    deltas = speech_rate_delta(sentences)
+    # Sentence 3 is Person1 in the answers: 4 words in 1 second against a 1.5 baseline.
+    assert deltas[3] == pytest.approx(4.0 - 1.5, abs=0.01)
+    # Person3 never spoke in the prepared remarks, so there is no baseline for that sentence.
+    assert 2 not in deltas
+
+
+def test_speech_rate_needs_a_marked_boundary(tmp_path):
+    data, labels = _call(tmp_path, text=["One two three.", "Four five six.", "Seven.", "Eight."])
+    assert speech_rate_delta(read_call(data, "20240101_TEST", labels)) == {}

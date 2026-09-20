@@ -11,6 +11,7 @@ import csv
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from backend.models import SourceSpan
 
@@ -120,8 +121,9 @@ def read_call(dataset: Path, call_id: str, labels: Path | None = None) -> list[S
     return sentences
 
 
-def within_speaker_delta(sentences: list[Sentence], column: str) -> dict[int, float]:
-    """Each sentence's measure minus that speaker's own mean over the prepared remarks.
+def within_speaker(sentences: list[Sentence], value: Callable[[Sentence], float | None]
+                   ) -> dict[int, float]:
+    """Each sentence's value minus that speaker's own mean over the prepared remarks.
 
     The speaker is their own control, which removes differences between people and recordings.
     A call with no marked prepared section, or a speaker who does not appear in it, yields no
@@ -129,16 +131,36 @@ def within_speaker_delta(sentences: list[Sentence], column: str) -> dict[int, fl
     """
     baselines: dict[str | None, list[float]] = {}
     for s in sentences:
-        value = s.features.get(column)
-        if s.segment == PREPARED and value is not None:
-            baselines.setdefault(s.speaker, []).append(value)
+        got = value(s)
+        if s.segment == PREPARED and got is not None:
+            baselines.setdefault(s.speaker, []).append(got)
     means = {speaker: sum(v) / len(v) for speaker, v in baselines.items() if v}
     deltas = {}
     for s in sentences:
-        value = s.features.get(column)
-        if s.segment == QA and value is not None and s.speaker in means:
-            deltas[s.index] = value - means[s.speaker]
+        got = value(s)
+        if s.segment == QA and got is not None and s.speaker in means:
+            deltas[s.index] = got - means[s.speaker]
     return deltas
+
+
+def speech_rate_delta(sentences: list[Sentence]) -> dict[int, float]:
+    """Change in words a second, from a speaker's prepared remarks to their answers.
+
+    Filled pauses are edited out of these transcripts, so disfluency cannot be counted from them.
+    Speaking rate survives editing, because it is the recorded length of a sentence against the
+    words that were said in it.
+    """
+    return within_speaker(sentences, lambda s: s.words_per_second)
+
+
+def within_speaker_delta(sentences: list[Sentence], column: str) -> dict[int, float]:
+    """Each sentence's measure minus that speaker's own mean over the prepared remarks.
+
+    The speaker is their own control, which removes differences between people and recordings.
+    A call with no marked prepared section, or a speaker who does not appear in it, yields no
+    value for those sentences rather than a number measured against someone else.
+    """
+    return within_speaker(sentences, lambda s: s.features.get(column))
 
 
 def speakers_in_prepared(sentences: list[Sentence]) -> set[str]:
