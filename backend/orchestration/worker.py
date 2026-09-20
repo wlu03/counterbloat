@@ -63,6 +63,30 @@ def _cancelled(store: Store, analysis_id: str) -> bool:
     return bool(store.get("analyses", analysis_id).get("cancel_requested"))
 
 
+# Bases on which a claim that says nothing is a claim about the whole, so a passage about a part
+# does measure something else. A claim about a total names no denominator, and a per-unit figure
+# is therefore not comparable with it.
+WHOLE_WHEN_UNSTATED = ("denominator", "population", "boundary")
+
+
+def _differences(differs_on: list[str], claim: Claim, span_id: str,
+                 manifest: RunManifest) -> list[str]:
+    """The bases on which the passage measures something other than the claim does.
+
+    A difference of metric, unit or period only means something when the claim states that basis.
+    A claim with no period cannot be measured over a different period, and counting that as a
+    difference turns evidence about the claim into evidence about something else.
+    """
+    stated = {"metric": claim.metric, "unit": claim.unit, "denominator": claim.denominator,
+              "population": claim.population, "boundary": claim.boundary, "period": claim.period}
+    found = [f for f in differs_on if f in WHOLE_WHEN_UNSTATED or stated.get(f)]
+    ignored = [f for f in differs_on if f not in found]
+    if ignored:
+        manifest.rejections.append(
+            f"difference on {', '.join(ignored)} ignored for {span_id}: the claim states none")
+    return found
+
+
 def _items(analysis: EvidenceAnalysis, state: InvestigationState, shown: dict[str, SourceSpan],
            manifest: RunManifest, store: Store) -> tuple[list[EvidenceItem], dict[str, str]]:
     claim = state.claim
@@ -78,7 +102,7 @@ def _items(analysis: EvidenceAnalysis, state: InvestigationState, shown: dict[st
         if (span.id, judgment.target) in known:
             continue  # already recorded, so every item built here is new and ids stay unique
         known.add((span.id, judgment.target))
-        found = list(judgment.differs_on)
+        found = _differences(judgment.differs_on, claim, span.id, manifest)
         relationship, limitations = judgment.relationship, list(judgment.limitations)
         if found and relationship == Relationship.contradicts:
             # Evidence measured on another basis qualifies the claim. It does not contradict it.
@@ -91,7 +115,8 @@ def _items(analysis: EvidenceAnalysis, state: InvestigationState, shown: dict[st
             document_sha256=source.sha256 if source else None,
             published_at=source.published_at if source else None, round=state.round + 1,
             start=span.start, end=span.end,
-            relationship=relationship, target=judgment.target, comparable=not found,
+            relationship=relationship, judged=judgment.relationship,
+            target=judgment.target, comparable=not found,
             differences=found, origin=judgment.origin, limitations=limitations))
         if judgment.repeats_span_id:
             repeats[judgment.span_id] = judgment.repeats_span_id

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from datetime import datetime
 from math import isfinite
 
@@ -150,6 +151,23 @@ def score_groups(state: InvestigationState, llm: LLM, manifest: RunManifest) -> 
     state.scores = kept
 
 
+def _agreed(state: InvestigationState, new_evidence_ids: list[str], new_calculation_ids: list[str],
+            llm: LLM, samples: int) -> StateUpdate:
+    """Ask the updater `samples` times and keep the status the samples agree on most often.
+
+    One sample decides a verdict on its own, and the same state can produce different statuses on
+    identical runs. The answer returned is a whole sample, so its summary and explanation match
+    the status it came with. A tie is settled by the first sample that reached the winning status.
+    """
+    drafts = [llm.update_state(state, new_evidence_ids, new_calculation_ids)
+              for _ in range(max(1, samples))]
+    if len(drafts) == 1:
+        return drafts[0]
+    counts = Counter(d.status for d in drafts)
+    best = max(counts, key=lambda status: (counts[status], -[d.status for d in drafts].index(status)))
+    return next(d for d in drafts if d.status == best)
+
+
 def run(state: InvestigationState, new_evidence_ids: list[str], new_calculation_ids: list[str],
         llm: LLM, settings: AssessmentSettings,
         manifest: RunManifest) -> tuple[StateUpdate, NumericBelief | None]:
@@ -171,7 +189,7 @@ def run(state: InvestigationState, new_evidence_ids: list[str], new_calculation_
         return StateUpdate(**result.model_dump(exclude={"probability"})), belief
     if settings.updater not in ("linguistic", "evidence_accumulator"):
         raise ValueError(f"unknown updater: {settings.updater}")
-    update = llm.update_state(state, new_evidence_ids, new_calculation_ids)
+    update = _agreed(state, new_evidence_ids, new_calculation_ids, llm, settings.updater_samples)
     if settings.updater == "linguistic":
         return update, None
     score_groups(state, llm, manifest)

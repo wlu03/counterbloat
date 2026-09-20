@@ -148,3 +148,37 @@ def test_a_score_is_not_reused_for_another_target_or_scorer_version(monkeypatch)
     monkeypatch.setattr(strategies, "SCORER_VERSION", "llm-scorer-next")
     strategies.score_groups(state, llm, _manifest())
     assert llm.score_calls == 3 and state.scores[0].scorer_version == "llm-scorer-next"
+
+
+def test_the_updater_status_is_the_one_its_samples_agree_on():
+    from backend.models import EvidenceStatus
+    from backend.providers.base import StateUpdate
+
+    class Wavering(FakeLLM):
+        def __init__(self, statuses):
+            super().__init__()
+            self.statuses, self.asked = list(statuses), 0
+
+        def update_state(self, state, new_evidence_ids, new_calculation_ids):
+            status = self.statuses[self.asked]
+            self.asked += 1
+            return StateUpdate(status=status, mechanisms=[], summary=f"sample {self.asked}",
+                               unresolved=[], explanation="")
+
+    state = _state()
+    settings = AssessmentSettings(updater="linguistic", updater_samples=3)
+    llm = Wavering(["insufficient", "contradicted", "contradicted"])
+    update, _ = strategies.run(state, [], [], llm, settings, _manifest())
+    # Two of the three samples agree, and the summary comes from the sample that said so.
+    assert update.status == EvidenceStatus.contradicted and update.summary == "sample 2"
+    assert llm.asked == 3
+
+    # With one sample the updater is asked once and its answer is used as it is.
+    llm = Wavering(["insufficient"])
+    update, _ = strategies.run(state, [], [], llm, AssessmentSettings(updater="linguistic"), _manifest())
+    assert update.status == EvidenceStatus.insufficient and llm.asked == 1
+
+    # No majority: the earliest status is kept, so the result is still a whole sample.
+    llm = Wavering(["mixed", "contradicted", "supported"])
+    update, _ = strategies.run(state, [], [], llm, settings, _manifest())
+    assert update.status == EvidenceStatus.mixed and update.summary == "sample 1"

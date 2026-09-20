@@ -35,6 +35,10 @@ class AssessmentSettings(BaseModel):
     # was not estimated from data.
     prior: float = Field(0.5, gt=0, lt=1)
     tempering: float = Field(1.0, gt=0, le=1)
+    # How many times the updater is asked before its status is taken. Above one, the status the
+    # samples agree on most often is used, which stops one unlucky sample from deciding a verdict.
+    # Each extra sample is one more provider call per round.
+    updater_samples: int = Field(1, ge=1, le=9)
     public_numeric_probability: Literal[False] = False
     review_original_decisive_evidence: Literal[True] = True
 

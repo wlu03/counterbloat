@@ -32,6 +32,15 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
 - Evidence, answers, and verified calculations of a round are recorded before the updater runs.
   Each calculation is recorded once. If the updater fails, they stay recorded and no assessment
   transition is written. A retry with the same input records no second update.
+- A passage measures something other than the claim only on a basis the claim states. A claim
+  that names no period cannot be measured over a different period. Denominator, population and
+  boundary are the exception: a claim that names none of them is a claim about the whole, so a
+  passage about a part does measure something else. A difference that is ignored is listed under
+  `rejections`.
+- Each evidence item keeps the analyst's own reading in `judged` beside the `relationship` a
+  difference of basis rewrote, so the updater reads both.
+- The updater is asked `assessment.updater_samples` times and the status its samples agree on
+  most often is used. It is 1 by default and 3 in `config/evaluation.yaml`.
 - A verdict needs admitted, comparable evidence about the claim in its own direction, or a
   calculation whose result code compared with the value the claim states. A calculation that
   answers a side question does not justify a verdict. Otherwise the status becomes

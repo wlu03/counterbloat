@@ -158,6 +158,9 @@ class EvidenceItem(BaseModel):
     end: int | None = None
     quote: str
     relationship: Relationship
+    # What the analyst judged before a difference of basis rewrote it. The updater is shown both,
+    # so it reads the analyst's own reading of the passage and not only the rewritten label.
+    judged: Relationship | None = None
     target: str  # "claim" or a question id
     comparable: bool = True
     differences: list[str] = []

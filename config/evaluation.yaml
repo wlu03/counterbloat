@@ -10,5 +10,7 @@ optimization:
   protected_compression: false
 assessment:
   updater: linguistic
+  # Three samples, majority status. One sample decides a verdict on its own otherwise.
+  updater_samples: 3
   public_numeric_probability: false
   review_original_decisive_evidence: true

@@ -192,3 +192,29 @@ def test_observations_survive_a_failed_updater_without_a_transition(store):
     assert store.find("updates", claim_id=state.claim.id) == []
     assert store.get("analyses", "an-1")["partial"] is True
 
+
+
+def test_a_difference_on_a_basis_the_claim_does_not_state_is_ignored(store):
+    """The claim states no period, so a passage measured over a different period still bears on
+    it. A claim about a total states no denominator, and a per-unit figure still does not."""
+    from backend.orchestration.worker import _differences
+    from backend.models import AssertionType, Claim, RunManifest
+
+    manifest = RunManifest(analysis_id="a", mode=Mode.frozen, config_hash="")
+    total = Claim(id="c", document_id="d", span_id="s", text="Emissions fell 40%.", start=0, end=19,
+                  assertion_type=AssertionType.numerical_comparison, unit="%", period=None,
+                  denominator=None, metric="total operational emissions")
+    # A per-unit figure is still not comparable with a claim about a total.
+    assert _differences(["denominator"], total, "s1", manifest) == ["denominator"]
+    # The claim names no period, so a difference of period is not a difference from it.
+    assert _differences(["period"], total, "s1", manifest) == []
+    assert _differences(["unit", "period"], total, "s1", manifest) == ["unit"]
+    assert any("the claim states none" in r for r in manifest.rejections)
+
+
+def test_the_analysts_own_reading_is_kept_beside_the_rewritten_one(store):
+    _run(_deps(store), [REPORT])
+    [state] = store.find("states", InvestigationState, analysis_id="an-1")
+    rewritten = [e for e in state.evidence if e.relationship != e.judged]
+    assert rewritten, "the fixture has a passage measured on another basis"
+    assert all(e.judged == "contradicts" and e.relationship == "qualifies" for e in rewritten)
