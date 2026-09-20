@@ -128,3 +128,25 @@ def test_the_period_of_the_call_wins_over_a_coarser_one_on_the_claim(monkeypatch
     # Told the call reported the first quarter, the quarterly figure is the one compared.
     found = xbrl.verify(claim, "0000012345", period="2015-Q1")
     assert found.accession == "quarter" and found.stance == xbrl.SUPPORTS
+
+
+@pytest.mark.parametrize("value,unit,metric", [
+    ("21%", None, "revenue"),
+    ("7.9", "percent", "revenue growth"),
+    ("130", "basis points", "SG&A as a percentage of gross profit"),
+    ("up 12 per cent", None, "revenues"),
+])
+def test_a_rate_of_change_is_not_compared_with_a_filed_level(monkeypatch, value, unit, metric):
+    _facts(monkeypatch, {"Revenues": [
+        {"end": "2015-03-31", "start": "2015-01-01", "val": 377_730_000, "accn": "x"}]})
+    claim = _claim(metric=metric, value=value, unit=unit, period="2015-Q1")
+    check = xbrl.verify(claim, "0000012345", period="2015-Q1")
+    assert check.stance == xbrl.NOT_FOUND and "rate of change" in check.note
+
+
+def test_an_amount_is_still_compared(monkeypatch):
+    _facts(monkeypatch, {"Revenues": [
+        {"end": "2015-03-31", "start": "2015-01-01", "val": 377_730_000, "accn": "x"}]})
+    check = xbrl.verify(_claim(metric="revenue", value="$377.7 million", period="2015-Q1"),
+                        "0000012345", period="2015-Q1")
+    assert check.stance == xbrl.SUPPORTS

@@ -34,6 +34,11 @@ TAGS: dict[str, tuple[str, ...]] = {
     "quarterly dividend": ("CommonStockDividendsPerShareDeclared",),
 }
 SCALES = {"thousand": 3, "million": 6, "billion": 9, "trillion": 12}
+# A change stated as a rate, such as a rise of four per cent. The tags in the table hold
+# levels, so a level cannot answer a rate, and working the rate out needs the figure for
+# the earlier period as well as this one. Neither is guessed at.
+RATE = re.compile(r"%|\bper\s?cent|\bbasis\s+points?\b|\bbps\b|\bpercentage\b",
+                  re.I)
 # Wording that names a measure the company defined itself. It has no filed counterpart, so the
 # difference from the filed figure is a disclosure gap to report, never a contradiction.
 ADJUSTED = re.compile(r"\b(?:adjusted|non[- ]?gaap|underlying|organic|pro[- ]?forma"
@@ -151,6 +156,9 @@ def verify(claim: Claim, cik: str, period: str | None = None) -> Check:
     tags = tag_for(claim.metric)
     if not tags:
         return Check(claim.id, NOT_FOUND, note="metric wording is not in the tag table")
+    if RATE.search(f"{claim.value or ''} {claim.unit or ''} {claim.metric or ''}"):
+        return Check(claim.id, NOT_FOUND,
+                     note="claim states a rate of change, which a filed level cannot answer")
     stated = stated_value(claim)
     if stated is None:
         return Check(claim.id, NOT_FOUND, note="claim states no number to check")
