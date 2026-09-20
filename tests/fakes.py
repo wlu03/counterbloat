@@ -54,7 +54,7 @@ class FakeLLM:
         # A supplied claim is read, so the fields do not depend on the extractor finding it.
         return claim_draft(text)
 
-    def plan_questions(self, claim, checklist):
+    def plan_questions(self, claim, checklist, task=""):
         return []
 
     def analyze_evidence(self, claim, questions, context):

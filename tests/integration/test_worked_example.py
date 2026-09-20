@@ -102,7 +102,7 @@ def test_evidence_ids_stay_unique_when_a_judgment_is_repeated(store):
 
 def test_cancel_during_the_only_claim_is_not_reported_complete(store):
     class Cancelling(FakeLLM):
-        def plan_questions(self, claim, checklist):
+        def plan_questions(self, claim, checklist, task=""):
             job = store.get("analyses", "an-1")
             job["cancel_requested"] = True
             store.update("analyses", "an-1", job)
@@ -237,3 +237,37 @@ def test_discovery_follows_the_open_questions_and_asks_each_query_once(store):
     assert asked and len(asked) == len(set(asked))
     # The query names the questions being worked on, not the claim alone.
     assert all(q.strip() for q in asked) and any(len(q) > 80 for q in asked)
+
+
+def test_the_decision_protocol_reaches_the_planner_and_the_updater(store):
+    """A task states which statuses apply and when the evidence is enough to use one."""
+    RULE = "Use insufficient only when no passage bears on the claim."
+    seen: dict[str, str] = {}
+
+    class Reading(FakeLLM):
+        def plan_questions(self, claim, checklist, task=""):
+            seen["planner"] = task
+            return []
+
+        def update_state(self, state, new_evidence_ids, new_calculation_ids):
+            seen["updater"] = state.task
+            return super().update_state(state, new_evidence_ids, new_calculation_ids)
+
+        def review(self, state, decisive):
+            seen["reviewer"] = state.task
+            return super().review(state, decisive)
+
+    deps = _deps(store)
+    deps.llm_factory, deps.task = Reading, RULE
+    _run(deps, [REPORT])
+    assert seen["planner"] == RULE and seen["updater"] == RULE and seen["reviewer"] == RULE
+    # The scoring target is a research object and stays out of the payload the updater is sent.
+    from backend.models import InvestigationState
+    from backend.providers.openai_client import OpenAILLM
+    shown = OpenAILLM._shown(InvestigationState(claim=_first_claim(store), task=RULE))
+    assert shown["task"] == RULE and "target" not in shown
+
+
+def _first_claim(store):
+    from backend.models import Claim
+    return store.find("claims", Claim)[0]

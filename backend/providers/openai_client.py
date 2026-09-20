@@ -90,8 +90,9 @@ class OpenAILLM:
         payload = {"question": question, "passages": context}
         return self._parse("direct", self.reason_model, prompts.DIRECT, payload, DirectAnswer)
 
-    def plan_questions(self, claim: Claim, checklist: list[str]) -> list[QuestionDraft]:
-        payload = {"claim": claim.model_dump(mode="json"), "checklist": checklist}
+    def plan_questions(self, claim: Claim, checklist: list[str],
+                       task: str = "") -> list[QuestionDraft]:
+        payload = {"claim": claim.model_dump(mode="json"), "checklist": checklist, "task": task}
         return self._parse("plan", self.reason_model, prompts.PLANNER, payload,
                            QuestionDrafts).questions
 

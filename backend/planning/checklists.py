@@ -62,12 +62,13 @@ def family(claim: Claim) -> str:
     return "product_attribute"
 
 
-def plan(claim: Claim, llm: LLM | None, manifest: RunManifest) -> list[VerificationQuestion]:
+def plan(claim: Claim, llm: LLM | None, manifest: RunManifest,
+         task: str = "") -> list[VerificationQuestion]:
     checklist = CHECKLISTS[family(claim)]
     drafts = []
     if llm is not None:
         try:
-            drafts = llm.plan_questions(claim, checklist)
+            drafts = llm.plan_questions(claim, checklist, task)
         except ProviderError as exc:
             manifest.errors.append(str(exc))  # the checklist alone is still a usable plan
     if not drafts:

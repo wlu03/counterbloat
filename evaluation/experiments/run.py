@@ -107,7 +107,7 @@ def verify(row: dict, llm_factory: Callable, searchable: dict[str, list[dict]],
                                 datetime.fromisoformat(published) if published else None)
         index.index(snapshot, spans)
     deps = Deps(store=store, index=index, llm_factory=llm_factory, router=router,
-                compressor=compressor, target=task.target,
+                compressor=compressor, target=task.target, task=task.rubric,
                 settings=settings if system == "A1" else settings_for(system, settings))
     score, stage = None, {}
     status: str

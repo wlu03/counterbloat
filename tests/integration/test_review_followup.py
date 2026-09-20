@@ -94,7 +94,7 @@ def test_the_requested_check_is_searched_for_before_other_open_questions(store):
             return super().search(query, **options)
 
     class ManyQuestions(_asks_once()):
-        def plan_questions(self, claim, checklist):
+        def plan_questions(self, claim, checklist, task=""):
             return [QuestionDraft(text=f"Planned question {i}?", why_it_matters="", evidence_needed="",
                                   materiality=3, answerability=3, critical=False) for i in range(4)]
 

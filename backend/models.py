@@ -260,6 +260,9 @@ class NumericBelief(BaseModel):
 
 class InvestigationState(BaseModel):
     claim: Claim
+    # How a verdict is decided for this claim: the labels available and when the evidence is
+    # enough to use them. Empty for the default rubric, where the prompts state it themselves.
+    task: str = ""
     target: ScoringTarget | None = None
     belief: NumericBelief | None = None
     scores: list[EvidenceScore] = []  # the latest score of each scoring unit

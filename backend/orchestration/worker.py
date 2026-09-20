@@ -49,6 +49,9 @@ class Deps:
     replicator: Callable[[str, list[str], int, int], tuple[bytes | None, Session]] | None = None
     # What internal scores are scores of. An experiment on a labelled dataset declares its own.
     target: Callable[[Claim, datetime | None], ScoringTarget] = strategies.new_target
+    # The decision protocol the planner and the updater are told. A dataset states its own; the
+    # default is empty, and the prompts then state the protocol themselves.
+    task: str = ""
 
 
 def current_commit() -> str | None:
@@ -184,7 +187,8 @@ def _calculations(analysis: EvidenceAnalysis, state: InvestigationState,
 def investigate(analysis_id: str, claim: Claim, deps: Deps, llm: LLM, manifest: RunManifest,
                 mode: Mode, cutoff: datetime | None) -> tuple[InvestigationState, dict[str, SourceSpan]]:
     settings = deps.settings
-    state = InvestigationState(claim=claim, questions=plan(claim, llm, manifest),
+    state = InvestigationState(claim=claim, task=deps.task,
+                               questions=plan(claim, llm, manifest, deps.task),
                                target=deps.target(claim, cutoff))
     seen: dict[str, SourceSpan] = {}
     return _rounds(analysis_id, state, seen, settings.max_investigation_rounds, deps, llm,

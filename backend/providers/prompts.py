@@ -33,6 +33,8 @@ PLANNER = (
     " write a neutral, answerable question, why it matters, and the evidence needed. Rate"
     " materiality and answerability from 1 to 3. Add a question only if the checklist misses"
     " something the wording depends on. Seek substantiation as actively as contradiction."
+    " When task is given, it states how this claim is decided and what evidence counts. Write"
+    " the questions that protocol needs, and drop checklist items it does not ask for."
     + _DATA_RULE
 )
 
@@ -72,6 +74,8 @@ UPDATER = (
     " Status is one of supported, contradicted, mixed, insufficient, not_yet_resolvable."
     " Name the overstatement mechanisms that apply. Explain what changed, citing evidence ids."
     " Keep unresolved conflicts. Missing evidence is not evidence against the claim."
+    " When state.task is given, it states which statuses apply to this claim and when the"
+    " evidence is enough to use one. Follow it rather than a standard of your own."
     + _DATA_RULE
 )
 
