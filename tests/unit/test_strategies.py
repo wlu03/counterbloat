@@ -65,7 +65,10 @@ def test_a_score_for_an_older_group_version_is_not_used():
     state.scores = [_score(state, 0, 2), _score(state, 1, 6)]
     merge(state, state.groups[0].id, state.groups[1].id)  # they were one observation
     belief = strategies.accumulate(state, settings)
-    assert belief.raw_probability == pytest.approx(0.20) and belief.contributions == []
+    # The merged unit is active and now has no score that applies to it. A number built from
+    # what is left would stand for a unit that was never scored, so there is no number.
+    assert belief.raw_probability is None and belief.contributions == []
+    assert belief.calibration_status == "incomplete"
     assert [g.active for g in state.groups] == [True, False]
     assert "merged" in state.groups[0].history[0]
 
@@ -98,7 +101,11 @@ def test_groups_that_feed_one_calculation_are_scored_together_and_count_once():
     settings = AssessmentSettings(updater="evidence_accumulator", prior=0.5)
     assert strategies.accumulate(state, settings).raw_logit == pytest.approx(1.75)
     withdraw(state, "e2")  # the calculation loses an input group, so the joined score no longer applies
-    assert strategies.accumulate(state, settings).raw_logit == pytest.approx(0.25)
+    # Group a is active again on its own and unscored, so the ledger is incomplete until it is
+    # scored. Reporting c's 0.25 alone would leave a out of a number that claims to include it.
+    assert strategies.accumulate(state, settings).raw_logit is None
+    strategies.score_groups(state, llm, _manifest())
+    assert strategies.accumulate(state, settings).raw_logit == pytest.approx(0.5)
 
 
 def test_unavailable_and_invalid_scores_add_nothing():
@@ -115,7 +122,10 @@ def test_unavailable_and_invalid_scores_add_nothing():
     settings = AssessmentSettings(updater="evidence_accumulator", prior=0.3)
     assert state.scores == []
     assert len(failures.errors) == 1 and len(failures.rejections) == 1
-    assert strategies.accumulate(state, settings).raw_probability == pytest.approx(0.3)
+    # Neither unit could be scored. Falling back to the prior would report a provider outage as
+    # a finding about the claim.
+    belief = strategies.accumulate(state, settings)
+    assert belief.raw_probability is None and belief.calibration_status == "incomplete"
 
 
 def test_withdrawal_removes_the_calculation_that_depended_on_the_group():
@@ -182,3 +192,47 @@ def test_the_updater_status_is_the_one_its_samples_agree_on():
     llm = Wavering(["mixed", "contradicted", "supported"])
     update, _ = strategies.run(state, [], [], llm, settings, _manifest())
     assert update.status == EvidenceStatus.mixed and update.summary == "sample 1"
+
+
+def test_a_second_copy_of_a_passage_is_not_a_second_observation_to_score():
+    llm, state = FakeLLM(), _state()
+    reconcile(state, [_item(1, "Emissions fell 40% at the bottle plant.")], {})
+    strategies.score_groups(state, llm, _manifest())
+    assert llm.score_calls == 1
+    # The same passage found again on another page joins the same group. Scoring it a second
+    # time would read one observation twice.
+    reconcile(state, [_item(2, "Emissions fell 40% at the bottle plant.")], {})
+    strategies.score_groups(state, llm, _manifest())
+    assert llm.score_calls == 1 and len(state.scores) == 1
+
+
+def test_a_score_that_names_no_admitted_evidence_is_not_used():
+    class Uncited(FakeLLM):
+        def score_evidence(self, target, claim, evidence, calculations):
+            return EvidenceScoreDraft(log_evidence=2.0, short_basis="",
+                                      supporting_evidence_ids=["e-does-not-exist"])
+
+    state, manifest = _state(), _manifest()
+    reconcile(state, [_item(1, "A.")], {})
+    strategies.score_groups(state, Uncited(), manifest)
+    assert state.scores == []
+    assert any("cites no admitted evidence" in r for r in manifest.rejections)
+
+
+def test_changing_the_target_or_the_prior_is_a_new_decision():
+    settings = AssessmentSettings(updater="evidence_accumulator", prior=0.5)
+    state = _state()
+    reconcile(state, [_item(1, "A.")], {})
+    base = strategies.input_hash(state, settings, "model-v1")
+    assert strategies.input_hash(state, settings, "model-v2") != base
+    assert strategies.input_hash(state, settings.model_copy(update={"prior": 0.05}),
+                                 "model-v1") != base
+    assert strategies.input_hash(state, settings.model_copy(update={"tempering": 0.1}),
+                                 "model-v1") != base
+    assert strategies.input_hash(state, settings.model_copy(update={"updater_samples": 3}),
+                                 "model-v1") != base
+    other = state.model_copy(update={"target": state.target.model_copy(
+        update={"id": "other-rubric", "hypothesis": "a different question"})})
+    assert strategies.input_hash(other, settings, "model-v1") != base
+    # The same inputs still give the same hash, so a retry records no second update.
+    assert strategies.input_hash(state, settings, "model-v1") == base

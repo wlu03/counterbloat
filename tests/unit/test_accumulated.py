@@ -48,7 +48,8 @@ class Scorer:
 
     def score_evidence(self, target, claim, evidence, related):
         self.seen += 1
-        return EvidenceScoreDraft(log_evidence=self.value, supporting_evidence_ids=[],
+        return EvidenceScoreDraft(log_evidence=self.value,
+                                  supporting_evidence_ids=[e.id for e in evidence],
                                   short_basis="stub")
 
 

@@ -202,7 +202,8 @@ def test_a_scorer_adds_an_accumulated_probability_and_its_basis(monkeypatch):
 
     class Scorer:
         def score_evidence(self, target, claim, evidence, related):
-            return EvidenceScoreDraft(log_evidence=1.5, supporting_evidence_ids=[],
+            return EvidenceScoreDraft(log_evidence=1.5,
+                                      supporting_evidence_ids=[e.id for e in evidence],
                                       short_basis="the filed figure differs")
 
     manifest = RunManifest(analysis_id="p", mode=Mode.live, config_hash="p")

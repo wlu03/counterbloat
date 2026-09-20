@@ -71,8 +71,9 @@ def test_order_and_repetition_do_not_move_the_accumulator():
     comparison = result["strategies"]["evidence_accumulator"]["comparison"]
     assert comparison["order_score_range"] == pytest.approx(0)
     assert comparison["duplicate_source"]["score_change"] == pytest.approx(0)
-    # The unrelated passage has no recorded score, so it abstains and the score does not change.
-    assert comparison["irrelevant_addition"]["score_change"] == pytest.approx(0)
+    # The unrelated passage has no recorded score, so it is an active unit that nothing scored.
+    # The accumulated score is then unavailable rather than unchanged.
+    assert comparison["irrelevant_addition"]["score_change"] is None
     # Scores exist only where the strategy produces them. Elsewhere they are reported as missing.
     assert result["strategies"]["linguistic"]["comparison"]["order_score_range"] is None
 
@@ -92,7 +93,9 @@ def test_evidence_without_a_usable_score_does_not_count_against_the_claim():
     base = Trace.model_validate_json((FIXTURES / "mechanics.json").read_text())
     trace = base.model_copy(update={"events": base.events[:1], "scripted_scores": {}})
     result = _accumulator(trace, 0.3)
-    assert result["final_score"] == pytest.approx(0.3)
+    # The evidence is admitted and unscored. The score is unavailable, not the prior: a prior
+    # reported here would be a number standing for a call that never returned.
+    assert result["final_score"] is None
     assert "no recorded score" in result["errors"][0]
 
 

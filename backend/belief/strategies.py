@@ -53,14 +53,37 @@ def active_evidence(state: InvestigationState) -> list[EvidenceItem]:
     return [e for e in state.evidence if e.group_id in active]
 
 
-def input_hash(state: InvestigationState, strategy: str) -> str:
-    """Identifies what an updater would be shown. The same hash means nothing new to decide on."""
+def input_hash(state: InvestigationState, settings: AssessmentSettings, model_version: str) -> str:
+    """Identifies what an updater would decide on. The same hash means nothing new to decide on.
+
+    Everything that changes the decision belongs here, not only the evidence: the target being
+    scored, the prior and tempering the accumulator uses, and the model and scorer versions.
+    A value left out is a change that could not cause the round to run again.
+    """
+    target = state.target
     return _hash({
-        "claim": (state.claim.id, state.claim.version, state.claim.text), "strategy": strategy,
+        "claim": (state.claim.id, state.claim.version, state.claim.text),
+        "qualifications": state.claim.qualifications,
+        "strategy": settings.updater, "samples": settings.updater_samples,
+        "prior": settings.prior, "tempering": settings.tempering,
+        "target": (target.id, target.claim_version, target.hypothesis, target.rubric,
+                   target.cutoff, target.protocol) if target else None,
+        "versions": (model_version, SCORER_VERSION),
         "evidence": [(e.id, e.quote, e.relationship, e.target, e.comparable, e.group_id)
                      for e in active_evidence(state)],
         "calculations": [(c.id, c.outputs, c.claim_relation) for c in state.calculations],
         "answers": [(q.id, q.status, q.answer) for q in state.questions]})
+
+
+def _distinct(members: list[EvidenceItem]) -> list[EvidenceItem]:
+    """One entry per observation. A second copy of a passage is not a second observation."""
+    seen, only = set(), []
+    for item in members:
+        here = (item.quote, item.relationship, item.comparable, tuple(item.differences))
+        if here not in seen:
+            seen.add(here)
+            only.append(item)
+    return only
 
 
 def context_hash(target: ScoringTarget, claim: Claim, members: list[EvidenceItem],
@@ -112,10 +135,18 @@ def accumulate(state: InvestigationState, settings: AssessmentSettings) -> Numer
     used = [s for s in state.scores if current.get(s.group_id) == s.group_version]
     for score in used:
         ledger.upsert(EvidenceContribution(score.group_id, score.group_version, score.log_evidence))
+    # A unit that could not be scored is missing, not neutral. Accumulating what is left would
+    # read a failed call as the prior, or as the surviving side of a balanced pair. The
+    # contributions are still listed, so what was scored is visible without a number standing
+    # for what was not.
+    complete = len(used) == len(current)
     return NumericBelief(
         target_id=_target(state).id, method="evidence_accumulator", prior=settings.prior,
         prior_provenance="neutral scenario prior, not estimated from data",
-        raw_logit=ledger.raw_logit(), raw_probability=ledger.raw_probability(), contributions=used)
+        raw_logit=ledger.raw_logit() if complete else None,
+        raw_probability=ledger.raw_probability() if complete else None,
+        calibration_status="uncalibrated" if complete else "incomplete",
+        contributions=used)
 
 
 def score_groups(state: InvestigationState, llm: LLM, manifest: RunManifest) -> None:
@@ -123,7 +154,7 @@ def score_groups(state: InvestigationState, llm: LLM, manifest: RunManifest) -> 
     kept: list[EvidenceScore] = []
     for key, groups in units(state).items():
         ids = {g.id for g in groups}
-        members = [e for e in state.evidence if e.group_id in ids]
+        members = _distinct([e for e in state.evidence if e.group_id in ids])
         related = [c for c in state.calculations if ids & set(c.lineage)]
         context = context_hash(_target(state), state.claim, members, related)
         cached = next((s for s in state.scores if s.group_id == key
@@ -143,10 +174,16 @@ def score_groups(state: InvestigationState, llm: LLM, manifest: RunManifest) -> 
                 f"evidence score rejected for {key}: not finite or outside the limit")
             continue
         member_ids = {e.id for e in members}
+        cited = [i for i in draft.supporting_evidence_ids if i in member_ids]
+        if draft.log_evidence and not cited:
+            # The scorer named no admitted evidence, so nothing it read can be checked.
+            manifest.rejections.append(
+                f"evidence score rejected for {key}: it cites no admitted evidence")
+            continue
         kept.append(EvidenceScore(
             group_id=key, group_version=_version(groups), log_evidence=draft.log_evidence,
             method="llm_estimated", short_basis=draft.short_basis,
-            supporting_evidence_ids=[i for i in draft.supporting_evidence_ids if i in member_ids],
+            supporting_evidence_ids=cited,
             conditioning_context_hash=context, scorer_version=SCORER_VERSION))
     state.scores = kept
 
@@ -205,7 +242,7 @@ def step(state: InvestigationState, new_evidence_ids: list[str], new_calculation
     retry cannot record a second update or change a score. A ProviderError leaves the state as
     it was.
     """
-    shown = input_hash(state, settings.updater)
+    shown = input_hash(state, settings, model_version)
     if shown == state.last_input_hash:
         return None
     previous = state.belief.raw_probability if state.belief else None

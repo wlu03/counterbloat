@@ -97,6 +97,18 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
 - `Finding.probability` is always null. Internal scores are stored with their target and method,
   are left out of the public endpoints, and are served by `GET /claims/{id}/research` only when
   `COUNTERCHECK_RESEARCH_VIEW` is set.
+- An accumulated score is produced only when every active scoring unit has a score that applies
+  to the current context. A unit whose score failed, or whose score is stale, makes the score
+  unavailable rather than being left out of it, so a failed provider call cannot be read as the
+  prior or as the surviving side of a balanced pair. The units that were scored are still
+  listed. A score that names no admitted evidence is rejected.
+- A repeated passage is one observation. Members of a scoring unit are collapsed on their quote
+  and reading before the unit is scored, so a second copy neither changes the conditioning
+  context nor causes a second scorer call.
+- The fingerprint that decides whether a round has anything new to decide on covers the claim
+  and its qualifications, the evidence, the calculations, the answers, the strategy and its
+  sample count, the prior and tempering, the target, and the model and scorer versions. A change
+  to any of them runs the round again.
 
 ## Not implemented
 
