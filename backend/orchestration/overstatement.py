@@ -138,7 +138,10 @@ def row_for(claim: Claim, *, speaker: str | None, segment: str, cik: str,
         puffery_per_100w=round(puffery_density(claim.text), 2),
         rhetorical_inflation=axes.rhetorical_inflation, evidence_gap=axes.evidence_gap,
         verdict=_verdict(axes, [check.stance]), evidence=evidence, parts=axes.parts,
-        probability=None if belief is None else round(belief.raw_probability, 4),
+        # None when no unit could be scored, and also when some unit could not: a score built
+        # from the rest would stand for evidence that was never read.
+        probability=None if belief is None or belief.raw_probability is None
+        else round(belief.raw_probability, 4),
         probability_basis=[] if belief is None else
         [{"group": c.group_id, "log_evidence": c.log_evidence, "basis": c.short_basis}
          for c in belief.contributions],

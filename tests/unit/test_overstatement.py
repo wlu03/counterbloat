@@ -257,3 +257,25 @@ def test_without_a_limit_every_eligible_passage_is_returned():
 def test_a_limit_larger_than_the_call_returns_everything():
     spans, sentences = _two_segment_call()
     assert len(overstatement.company_spans(spans, sentences, {"P1"}, limit=99)) == 10
+
+
+def test_a_row_has_no_probability_when_one_of_its_units_could_not_be_scored(monkeypatch):
+    """A score built from the units that did answer would stand for the one that did not."""
+    from backend.models import EvidenceScore, NumericBelief
+    _stub(monkeypatch)
+
+    scored = EvidenceScore(group_id="g0", group_version=1, log_evidence=1.5,
+                           method="llm_estimated", supporting_evidence_ids=["e0"],
+                           short_basis="the filed figure differs",
+                           conditioning_context_hash="h", scorer_version="v")
+    incomplete = NumericBelief(target_id="t", method="evidence_accumulator", prior=0.5,
+                               raw_logit=None, raw_probability=None,
+                               calibration_status="incomplete", contributions=[scored])
+    monkeypatch.setattr(overstatement, "probability_for", lambda *a, **k: incomplete)
+    row = overstatement.row_for(_claim("Demand for our product is strong."), speaker="P1",
+                                segment="prepared", cik="0000012345", sections=SECTIONS,
+                                manifest=RunManifest(analysis_id="p", mode=Mode.live,
+                                                     config_hash="p"),
+                                scorer=object())
+    # The unit that did score is still listed, and there is no number over the top of it.
+    assert row.probability is None and len(row.probability_basis) == 1
