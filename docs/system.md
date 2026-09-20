@@ -149,6 +149,11 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
   search of the analysis used vectors, errors, and rejections. It does not record SDK versions or a corpus
   hash. Cost is computed by the scoring step from a price list the user supplies, and is
   reported as unknown without one.
+- Compression runs only when the compressible background is at least 1,200 characters. Because
+  footnotes, table rows and captions are now protected with the retrieved passages, a document
+  whose expanded context is mostly those kinds leaves too little background and is sent
+  uncompressed. That is not recorded as a compression fallback, which counts only a failed or
+  lossy compression.
 - Jev and Token Company calls are tried once. A job runs as a FastAPI background task and cannot
   resume, so a server restart leaves it `running`.
 - `Claim.version` is always 1. A newly found qualification does not create a new claim version.
