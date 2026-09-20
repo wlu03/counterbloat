@@ -82,23 +82,27 @@ def _is_value(text: str) -> bool:
     return bool(_VALUE.fullmatch(text) or _SYMBOL.fullmatch(text)) and not _YEAR.fullmatch(text)
 
 
+_NOTE = re.compile(r"\(.+\)")  # a note about every row, such as "(in millions)"
+
+
 def _header_rows(rows: list[list[Cell]]) -> int:
     """How many leading rows are header rows.
 
-    A row of <th> cells is a header row. So is a row that holds no figure, when its first cell is
-    empty (filings put period labels in ordinary cells above the figures) or when it is the first
-    row with a label and another row follows it.
+    A row of <th> cells is a header row. So is a row that holds only a bracketed note. So is a row
+    with no figure in it, when its first cell is empty (filings put period labels in ordinary
+    cells above the figures) or when it is the first row with a label and another row follows it.
     """
     count, labelled = 0, False
     for position, cells in enumerate(rows):
         filled = [c for c in cells if c[2]]
         others = [c for c in filled if c[0] != 0]
+        note = not others and bool(_NOTE.fullmatch(_label(cells)))
         th_row = all(c[3] for c in filled)
         plain = bool(others) and not any(_is_value(c[2]) for c in others)
         first_labelled = bool(_label(cells)) and not labelled and position + 1 < len(rows)
-        if not (th_row or (plain and (not _label(cells) or first_labelled))):
+        if not (th_row or note or (plain and (not _label(cells) or first_labelled))):
             break
-        labelled = labelled or bool(_label(cells))
+        labelled = labelled or (bool(_label(cells)) and not note)
         count += 1
     return count
 
@@ -139,10 +143,11 @@ def _table_rows(table) -> list[tuple[str, TableRow]]:
         found = [c[2] for cells in headers for c in cells if c[0] <= column <= c[1] and c[2]]
         return " ".join(dict.fromkeys(found))
 
-    if caption_text is None and re.fullmatch(r"\(.+\)", heading(0)):
+    if caption_text is None:
         # A bracketed note in the label column of the header rows, such as "(in millions)",
         # applies to every row, so it is kept with each of them. A column name is not.
-        caption_text = heading(0)
+        notes = [_label(cells) for cells in headers if _NOTE.fullmatch(_label(cells))]
+        caption_text = " ".join(dict.fromkeys(notes)) or None
     result = []
     for cells in rows[split:]:
         # The number's own column is looked up first, then the column of its currency sign.

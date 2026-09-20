@@ -162,3 +162,12 @@ def test_a_document_parsed_again_by_a_newer_parser_loses_its_older_passages(stor
     again, spans = admit(store, FILING_TABLE, "text/html")
     stored = store.find("spans", SourceSpan, document_id=snapshot.id)
     assert again.parser_version == "parse-newer" and [s.id for s in stored] == [s.id for s in spans]
+
+
+def test_a_units_note_in_a_row_of_its_own_does_not_hide_the_header_row_below_it():
+    html = (b"<table><tr><td>(In millions)</td><td></td><td></td><td></td></tr>"
+            b"<tr><td>Year Ended June 30,</td><td></td><td>2026</td><td>2025</td></tr>"
+            b"<tr><td>Revenue</td><td>$</td><td>305,453</td><td>281,724</td></tr>"
+            b"<tr><td>Foreign currency</td><td>$</td><td>(13,653</td><td>)</td></tr></table>")
+    assert _texts(html) == ["(In millions) | Revenue | 2026: $305,453 | 2025: 281,724",
+                            "(In millions) | Foreign currency | 2026: $(13,653)"]
