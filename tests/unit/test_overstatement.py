@@ -155,3 +155,17 @@ def test_without_a_prior_filing_every_passage_stays_searchable(monkeypatch):
     row = overstatement.row_for(_claim("Demand for our product is strong."), speaker="P1",
                                 segment="prepared", cik="0000012345", sections=now)
     assert [e for e in row.evidence if e["agent"] == "risk-matcher"]
+
+
+def test_drift_still_reads_wording_the_filing_carried_over(monkeypatch):
+    _stub(monkeypatch)
+    softened = ("Demand for our product may fall if customers reduce their spending during "
+                "an economic downturn in any of the main markets we serve.")
+    now, before = _two_years([softened, ADDED_RISK], [CARRIED])
+    row = overstatement.row_for(_claim("Demand for our product is strong."), speaker="P1",
+                                segment="prepared", cik="0000012345", sections=now, prior=before)
+    # The matcher is limited to the added risk, but drift still pairs the carried-over passage.
+    matched = [e for e in row.evidence if e["agent"] == "risk-matcher"]
+    moved = [e for e in row.evidence if e["agent"] == "drift-tracker"]
+    assert moved and moved[0]["similarity"] >= 0.6
+    assert all("regulator" in e["quote"] for e in matched)

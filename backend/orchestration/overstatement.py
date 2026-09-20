@@ -94,11 +94,17 @@ def row_for(claim: Claim, *, speaker: str | None, segment: str, cik: str,
                              "months_after": later.months_after,
                              "accession": later.accession, "note": later.note})
 
-    if prior is not None and matches:
-        moved = drift.follow(next(sp for _, sp in risk_matcher.candidates(sections)
-                                  if sp.id == matches[0].span_id),
-                             [sp for _, sp in risk_matcher.candidates(prior)])
-        if moved.status != drift.NOT_FOUND:
+    if prior is not None:
+        # The matcher above reads only what the filing added, because carried-over wording cannot
+        # be the filing answering this claim. Drift asks the opposite question, whether the
+        # company still says what it said last year, so it reads the carried-over wording too and
+        # needs its own match over every passage.
+        standing = risk_matcher.match(claim, sections, embed=embed, k=1)
+        moved = drift.follow(
+            next(sp for _, sp in risk_matcher.candidates(sections)
+                 if sp.id == standing[0].span_id),
+            [sp for _, sp in risk_matcher.candidates(prior)]) if standing else None
+        if moved is not None and moved.status != drift.NOT_FOUND:
             evidence.append({"agent": moved.agent, "tier": moved.tier,
                              "stance": "context", "status": moved.status,
                              "strength_change": moved.strength_change,
