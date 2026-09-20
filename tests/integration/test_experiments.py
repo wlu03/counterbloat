@@ -124,3 +124,19 @@ def test_a_saturated_score_does_not_break_the_log_likelihood():
                   "compression_fallbacks": 0, "tokens_by_model": {}}
     result = score([prediction], [{"id": 1, "label": "Refuted"}], TASK)
     assert result["nll"] == pytest.approx(0, abs=1e-9) and result["target"] == ["averitec-refuted"]
+
+
+def test_climate_fever_and_quantemp_are_scored_on_their_own_label_fields():
+    def prediction(status):
+        return {"id": "x", "status": status, "score": None, "target": None, "calls": {}, "failed_calls": 0,
+                "latency_ms": 0, "skipped_by_router": 0, "compression_fallbacks": 0, "tokens_by_model": {}}
+
+    climate = VERIFICATION["climate_fever"]
+    assert score([prediction("mixed")], [{"id": "x", "claim_label": "DISPUTED"}], climate)["status_agreement"] == 1.0
+    assert score([prediction("supported")], [{"id": "x", "claim_label": "REFUTES"}], climate)["status_agreement"] == 0.0
+    quantemp = VERIFICATION["quantemp"]
+    assert score([prediction("contradicted")], [{"id": "x", "label": "False"}], quantemp)["status_agreement"] == 1.0
+    # QuanTemp has no class for too little evidence, so abstaining never agrees with it.
+    assert score([prediction("insufficient")], [{"id": "x", "label": "True"}], quantemp)["status_agreement"] == 0.0
+    assert quantemp.target(Claim(id="c", document_id="d", span_id="s", text="t", start=0, end=1,
+                                 assertion_type=AssertionType.numerical_comparison), None).id == "quantemp-false"

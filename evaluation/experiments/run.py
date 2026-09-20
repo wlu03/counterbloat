@@ -157,7 +157,8 @@ def _cost(predictions: list[dict], prices: dict[str, list[float]] | None) -> flo
 def score(predictions: list[dict], gold: list[dict], task: VerificationTask | None,
           prices: dict[str, list[float]] | None = None) -> dict:
     usable = (lambda label: label in task.status_of) if task else (lambda label: label is not None)
-    labels = {str(g["id"]): g["label"] for g in gold if usable(g["label"])}
+    field = task.label_field if task else "label"
+    labels = {str(g["id"]): g.get(field) for g in gold if usable(g.get(field))}
     ran = [p for p in predictions if str(p["id"]) in labels and p["status"] != "not_run"]
     result = {"examples": len(predictions), "scored": len(ran),
               "gold_rows_without_a_usable_label": len(gold) - len(labels),

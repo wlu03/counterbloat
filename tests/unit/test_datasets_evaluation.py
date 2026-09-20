@@ -181,3 +181,48 @@ def test_a_changed_upstream_file_is_refused(tmp_path, monkeypatch):
 def test_every_fetchable_dataset_is_an_adapter_or_a_corpus():
     from datasets.prepare import ADAPTERS
     assert set(dataset_fetch.SOURCES) - dataset_fetch.CORPORA <= set(ADAPTERS)
+
+
+def test_climate_fever_evidence_sentences_become_searchable_documents_without_labels(tmp_path):
+    source = tmp_path / "cf.jsonl"
+    source.write_text(json.dumps({"claim_id": 7, "claim": "Sea level is rising.", "claim_label": "SUPPORTS",
+                                  "evidences": [{"evidence_id": "Sea level rise:3", "article": "Sea level rise",
+                                                 "evidence": "Sea level rose 20 cm.", "evidence_label": "SUPPORTS",
+                                                 "votes": ["SUPPORTS"], "entropy": 0.0}]}) + "\n")
+    [example] = climate_fever.load(source)
+    assert example.searchable == [{"content": "Sea level rose 20 cm.", "media_type": "text/plain",
+                                   "url": "https://en.wikipedia.org/wiki/Sea_level_rise"}]
+    assert "SUPPORTS" not in json.dumps(example.searchable)
+
+
+def test_quantemp_snippets_that_name_a_fact_checker_or_a_rating_are_not_searchable(tmp_path):
+    import zipfile
+
+    claims = tmp_path / "test_claims_quantemp.json"
+    claims.write_text(json.dumps([{"claim": "Unemployment fell to 3.5%. ", "label": "True"},
+                                  {"claim": "A claim with no retrieved snippets.", "label": "False"}]))
+    snippets = (["The rate fell to 3.5% in September, the bureau said.", "PolitiFact rated this claim Mostly True.",
+                 "Fact check: did unemployment fall?", "The claim was rated false by reviewers.", "  "]
+                + [f"Background snippet number {n}." for n in range(40)])
+    with zipfile.ZipFile(tmp_path / quantemp.EVIDENCE, "w") as archive:
+        archive.writestr(quantemp.EVIDENCE.removesuffix(".zip"),
+                         json.dumps([{"claim": "Unemployment fell to 3.5%.", "docs": snippets}]))
+    first, second = quantemp.load(claims)
+    texts = [d["content"] for d in first.searchable]
+    assert texts[0].startswith("The rate fell") and len(texts) == quantemp.SNIPPETS_PER_CLAIM
+    assert not any(quantemp.LEAK.search(t) for t in texts) and second.searchable == []
+    assert "label" not in first.model_visible
+
+
+def test_prepare_writes_the_searchable_file_and_counts_it(tmp_path):
+    from datasets.prepare import prepare
+
+    source = tmp_path / "cf.jsonl"
+    source.write_text(json.dumps({"claim_id": 1, "claim": "c", "claim_label": "REFUTES", "evidences": [
+        {"evidence_id": "A:1", "article": "A", "evidence": "One sentence.", "evidence_label": "REFUTES"}]}) + "\n")
+    manifest = json.loads(prepare("climate_fever", source, "rev", "all", tmp_path).read_text())
+    rows = (tmp_path / "prepared/climate_fever/all.searchable.jsonl").read_text().splitlines()
+    assert json.loads(rows[0]) == {"example_id": "climate_fever-1", "content": "One sentence.",
+                                   "media_type": "text/plain", "url": "https://en.wikipedia.org/wiki/A"}
+    assert manifest["field_mapping"]["searchable_documents"] == 1
+    assert "REFUTES" not in (tmp_path / "prepared/climate_fever/all.visible.jsonl").read_text()

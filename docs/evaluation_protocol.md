@@ -73,6 +73,25 @@ and its own store. The searchable file is supplied by the user, one row per docu
 store and index that hold only its own searchable documents. The gold file is opened by the
 `score` command only.
 
+CLIMATE-FEVER and QuanTemp are prepared by the same command from the files that
+`python -m datasets.fetch` downloads and checks by SHA256:
+
+    uv run python -m datasets.prepare climate_fever datasets/climate_fever/source/climate-fever.jsonl \\
+        --revision sha256:CHECKSUM --split all
+    uv run python -m datasets.prepare quantemp datasets/quantemp/source/test_claims_quantemp.json \\
+        --revision sha256:CHECKSUM --split test
+
+Both also get `SPLIT.searchable.jsonl`, the documents a system may search for each example.
+CLIMATE-FEVER (1,535 claims) has the five Wikipedia sentences the annotators judged, 7,675
+documents, without their labels, votes, or entropy. QuanTemp has 9,935 training, 3,084 validation,
+and 2,495 test claims. Only the test split has documents: the first 30 of the publisher's retrieved
+web snippets per claim, 74,850 in all. A snippet that names a fact-checker or states a rating is
+left out, because it can give the verdict away: 4,248 of 550,616 published snippets, 0.8%. A
+snippet that states a verdict in other words is not caught. The snippets carry no date, so an
+evidence cutoff cannot be applied to them, and some were published after the claim. The
+fact-check article and its address stay with the labels. QuanTemp has no class for too little
+evidence, so a finding of `insufficient` always counts as a disagreement there.
+
 Datasets keep their own labels. environmental_claims measures claim detection. AVeriTeC measures
 agreement between the evidence status and the dataset verdict, and its scoring target is the
 dataset's Refuted label, not overstatement.

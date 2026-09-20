@@ -6,6 +6,7 @@ SOURCE must already be on disk. This command downloads nothing. Obtain each data
 publisher under its license and pass the revision you obtained. Output:
 
   DIR/prepared/DATASET/SPLIT.visible.jsonl   what a system under test may read
+  DIR/prepared/DATASET/SPLIT.searchable.jsonl  documents it may search, when the dataset has any
   DIR/gold/DATASET/SPLIT.jsonl               labels, readable by the owner only
   DIR/prepared/DATASET/SPLIT.manifest.json   hash, row count, revision, license, field names
 """
@@ -37,9 +38,13 @@ def prepare(dataset: str, source: str | Path, revision: str, split: str, out: st
     examples = list(load(source))
     out = Path(out)
     visible = out / "prepared" / dataset / f"{split}.visible.jsonl"
-    export(examples, visible, out / "gold" / dataset / f"{split}.jsonl")
+    documents = sum(len(e.searchable) for e in examples)
+    export(examples, visible, out / "gold" / dataset / f"{split}.jsonl",
+           visible.with_name(f"{split}.searchable.jsonl") if documents else None)
     fields = {"model_visible": sorted(examples[0].model_visible),
-              "evaluation_only": sorted(examples[0].evaluation_only)} if examples else {}
+              "evaluation_only": sorted(examples[0].evaluation_only),
+              "searchable_documents": documents,
+              "examples_with_documents": sum(bool(e.searchable) for e in examples)} if examples else {}
     return write_manifest(dataset, source, len(examples), revision, license, [split], fields,
                           visible.parent, f"{split}.manifest")
 

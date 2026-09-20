@@ -26,4 +26,9 @@ def load(path):
                                        "evidence_label": _name(e.get("evidence_label"), EVIDENCE_LABELS),
                                        "votes": e.get("votes"), "entropy": e.get("entropy")}
                                       for e in evidences]},
-                                 ("claim_label",)))
+                                 ("claim_label",)),
+            # Each evidence sentence is one searchable document, named by its Wikipedia article.
+            # The address is a label of where the sentence came from. Nothing fetches it.
+            searchable=[{"content": e["evidence"], "media_type": "text/plain",
+                         "url": "https://en.wikipedia.org/wiki/" + e["article"].replace(" ", "_")}
+                        for e in evidences])
