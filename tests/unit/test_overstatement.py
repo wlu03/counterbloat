@@ -244,8 +244,8 @@ def test_a_limit_reaches_the_answers_and_not_only_the_opening():
     assert len(chosen) == 4
     assert PREPARED in segments and QA in segments
     # Whatever is chosen is still read in the order it was said.
-    assert [s.id for s in chosen] == sorted(chosen, key=lambda s: int(s.id.split(":")[1]))[0:4] \
-        or all(int(a.id.split(":")[1]) < int(b.id.split(":")[1]) for a, b in zip(chosen, chosen[1:]))
+    positions = [int(s.id.split(":")[1]) for s in chosen]
+    assert positions == sorted(positions)
 
 
 def test_without_a_limit_every_eligible_passage_is_returned():
