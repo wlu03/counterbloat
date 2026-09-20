@@ -15,19 +15,17 @@ from typing import Callable
 import httpx
 from pydantic import ValidationError
 
-from backend.config import Settings, env
+from backend.config import Settings
 from backend.db import Store
 from backend.ingestion.snapshot import admit
 from backend.models import Claim, Finding, InvestigationState, Mode, RunManifest, SourceSpan
 from backend.orchestration.worker import Deps, run_analysis
-from backend.providers.base import ProviderError
+from backend.providers.devin import run_session
 from backend.retrieval.memory import MemoryIndex
 from evaluation.comparison.schema import (
     PROMPT, AuditFinding, AuditNumber, AuditOutput, AuditQuote, Case,
 )
 
-DEVIN_API = "https://api.devin.ai/v3/organizations"
-POLL_FAILURES_ALLOWED = 5  # consecutive failed status requests before a session is given up
 
 
 class NoAnswer(Exception):
@@ -106,74 +104,18 @@ def chatgpt(prepared: Prepared, llm_factory: Callable) -> tuple[AuditOutput, dic
     return output, _usage(manifest)
 
 
-def _inlined(schema: dict) -> dict:
-    """Devin wants a self-contained schema, so each $ref is replaced by what it points to."""
-    definitions = schema.get("$defs", {})
-
-    def resolve(node):
-        if isinstance(node, dict):
-            if "$ref" in node:
-                return resolve(definitions[node["$ref"].split("/")[-1]])
-            return {k: resolve(v) for k, v in node.items() if k != "$defs"}
-        return [resolve(v) for v in node] if isinstance(node, list) else node
-    return resolve(schema)
-
-
 def devin(prepared: Prepared, client: httpx.Client | None = None, max_acu: int = 5,
           timeout_s: int = 1800, poll_s: float = 15, sleep=time.sleep) -> tuple[AuditOutput, dict]:
-    key, org = env("DEVIN_API_KEY"), env("DEVIN_ORG_ID")
-    if not (key and org):
-        raise ProviderError("DEVIN_API_KEY and DEVIN_ORG_ID must be set")
-    client = client or httpx.Client(timeout=60)
-    headers = {"Authorization": f"Bearer {key}"}
-    body = {"prompt": f"{PROMPT}\n\nReturn the findings as the structured output of this session. "
-                      "Do not write code and do not open a pull request.\n\nDocuments (JSON):\n"
-                      + json.dumps(prepared.payload()),
-            "title": "Countercheck comparison", "tags": ["countercheck-comparison"],
-            "structured_output_required": True, "max_acu_limit": max_acu,
-            "structured_output_schema": _inlined(AuditOutput.model_json_schema())}
-    started = time.monotonic()
+    prompt = (f"{PROMPT}\n\nReturn the findings as the structured output of this session. "
+              "Do not write code and do not open a pull request.\n\nDocuments (JSON):\n"
+              + json.dumps(prepared.payload()))
+    session = run_session(prompt, AuditOutput.model_json_schema(), "Countercheck comparison",
+                          max_acu, timeout_s, client, poll_s, sleep)
+    usage = {"sessions": 1, "acus": session.acus, "session_url": session.url, "errors": []}
+    if session.output is None:
+        raise NoAnswer(f"devin {session.ended} without structured output", usage)
     try:
-        # Not retried: a second request could start a second paid session.
-        created = client.post(f"{DEVIN_API}/{org}/sessions", json=body, headers=headers)
-        created.raise_for_status()
-        session_id = created.json()["session_id"]
-    except (httpx.HTTPError, KeyError, ValueError, TypeError) as exc:
-        raise ProviderError(f"devin session could not be created: {exc}") from exc
-    session: dict = {"status": "new"}
-    failures, timed_out = 0, False
-    while True:
-        try:
-            answer = client.get(f"{DEVIN_API}/{org}/sessions/{session_id}", headers=headers)
-            answer.raise_for_status()
-            session, failures = answer.json(), 0
-        except (httpx.HTTPError, ValueError) as exc:
-            # One failed status request does not end a paid session. Several in a row do.
-            failures += 1
-            if failures > POLL_FAILURES_ALLOWED:
-                raise ProviderError(f"devin session {session_id} could not be read: {exc}") from exc
-        # A running session with no detail yet has only just started, so it is still waited for.
-        waiting = failures > 0 or session["status"] in ("new", "claimed", "resuming") or (
-            session["status"] == "running" and session.get("status_detail") in (None, "working"))
-        if not waiting:
-            break
-        if time.monotonic() - started > timeout_s:
-            timed_out = True
-            try:  # stop the session, so that it does not go on spending up to its ACU limit
-                client.delete(f"{DEVIN_API}/{org}/sessions/{session_id}", headers=headers)
-            except httpx.HTTPError:
-                pass
-            break
-        sleep(poll_s)
-    usage = {"sessions": 1, "acus": session.get("acus_consumed"),
-             "session_url": session.get("url"), "errors": []}
-    if timed_out:
-        raise NoAnswer(f"devin session {session_id} did not finish in {timeout_s} s", usage)
-    if not session.get("structured_output"):
-        raise NoAnswer(f"devin session {session_id} ended without structured output: "
-                       f"{session['status']} {session.get('status_detail')}", usage)
-    try:
-        return AuditOutput.model_validate(session["structured_output"]), usage
+        return AuditOutput.model_validate(session.output), usage
     except ValidationError as exc:
-        raise NoAnswer(f"devin session {session_id} returned output in another format: "
+        raise NoAnswer(f"devin {session.ended} with output in another format: "
                        f"{exc.error_count()} errors", usage) from exc

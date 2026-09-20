@@ -133,6 +133,7 @@ def test_the_devin_arm_creates_one_session_polls_it_and_reads_the_structured_out
     assert created.headers["authorization"] == "Bearer cog_test"
     body = json.loads(created.content)
     assert body["structured_output_required"] is True and body["max_acu_limit"] == 5
+    assert body["secret_ids"] == [] and body["knowledge_ids"] == []  # no stored secrets in the session
     assert "$ref" not in json.dumps(body["structured_output_schema"])
     assert "2024: 10 | 2025: 6" in body["prompt"] and "SECRET-RATIONALE" not in body["prompt"]
     assert [r.method for r in requests] == ["POST", "GET", "GET", "GET"]
@@ -170,7 +171,7 @@ def test_a_failed_status_request_is_retried_and_a_timed_out_session_is_stopped(m
 
     replies[:] = [httpx.Response(200, json={"status": "running", "status_detail": "working"})] * 3
     requests.clear()
-    with pytest.raises(arms.NoAnswer, match="did not finish"):
+    with pytest.raises(arms.NoAnswer, match="timed out"):
         arms.devin(arms.Prepared(CASE), client=client, sleep=lambda s: None, timeout_s=-1)
     assert requests == ["POST", "GET", "DELETE"]
 
