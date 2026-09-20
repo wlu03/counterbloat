@@ -109,3 +109,49 @@ def test_a_later_restatement_is_added_as_context_without_changing_the_verdict(mo
     assert later and later[0]["stance"] == "context" and later[0]["months_after"] == 5
     # A restatement months later does not turn a confirmed figure into a contradicted one.
     assert row.verdict == overstatement.CONSISTENT
+
+
+CARRIED = ("Demand for our product may fall if customers reduce their spending sharply "
+           "during an economic downturn in any of our main markets.")
+ADDED_RISK = ("A regulator has opened an inquiry into how we recognise revenue from the "
+              "multi-year subscription contracts we sell through resellers.")
+
+
+def _two_years(current_texts, prior_texts):
+    return ({RISK_FACTORS: Section(item=RISK_FACTORS, title="Risk Factors",
+                                   spans=[_span(i, t) for i, t in enumerate(current_texts)])},
+            {RISK_FACTORS: Section(item=RISK_FACTORS, title="Risk Factors",
+                                   spans=[_span(100 + i, t) for i, t in enumerate(prior_texts)])})
+
+
+def _stub(monkeypatch):
+    monkeypatch.setattr(overstatement.xbrl, "verify",
+                        lambda c, cik, period=None: xbrl.Check(c.id, xbrl.NOT_FOUND, note="stub"))
+    monkeypatch.setattr(overstatement, "hedging_delta", lambda a, b: 0.0)
+
+
+def test_wording_carried_over_from_last_year_is_not_matched(monkeypatch):
+    _stub(monkeypatch)
+    now, before = _two_years([CARRIED], [CARRIED])
+    row = overstatement.row_for(_claim("Demand for our product is strong."), speaker="P1",
+                                segment="prepared", cik="0000012345", sections=now, prior=before)
+    assert [e for e in row.evidence if e["agent"] == "risk-matcher"] == []
+    assert row.verdict == overstatement.ABSTAIN
+
+
+def test_a_risk_the_filing_added_this_year_is_matched(monkeypatch):
+    _stub(monkeypatch)
+    now, before = _two_years([CARRIED, ADDED_RISK], [CARRIED])
+    row = overstatement.row_for(
+        _claim("Revenue from reseller subscription contracts grew."), speaker="P1",
+        segment="prepared", cik="0000012345", sections=now, prior=before)
+    found = [e for e in row.evidence if e["agent"] == "risk-matcher"]
+    assert found and "regulator" in found[0]["quote"]
+
+
+def test_without_a_prior_filing_every_passage_stays_searchable(monkeypatch):
+    _stub(monkeypatch)
+    now, _ = _two_years([CARRIED], [CARRIED])
+    row = overstatement.row_for(_claim("Demand for our product is strong."), speaker="P1",
+                                segment="prepared", cik="0000012345", sections=now)
+    assert [e for e in row.evidence if e["agent"] == "risk-matcher"]

@@ -14,7 +14,7 @@ from backend.claims.features import puffery_density, specificity, specificity_sc
 from backend.claims.lexicon import LexiconMissing, hedging_delta
 from backend.ingestion.sections import Section
 from backend.models import Claim
-from backend.retrieval import risk_matcher
+from backend.retrieval import drift, novelty, risk_matcher
 from backend.verification import outcomes, xbrl
 
 ABSTAIN, CONTRADICTED, CONSISTENT = "abstain", "contradicted", "consistent"
@@ -57,6 +57,7 @@ def row_for(claim: Claim, *, speaker: str | None, segment: str, cik: str,
             sections: dict[str, Section], period: str | None = None,
             accession: str | None = None, source_url: str | None = None,
             turn: str | None = None, call_date: str | None = None,
+            prior: dict[str, Section] | None = None,
             embed: Callable[[list[str]], list[list[float]]] | None = None) -> Row:
     """One row for one claim.
 
@@ -65,8 +66,16 @@ def row_for(claim: Claim, *, speaker: str | None, segment: str, cik: str,
     sentence is almost always zero and says nothing.
     """
     check = xbrl.verify(claim, cik, period)
-    matches = risk_matcher.match(claim, sections, accession=accession, source_url=source_url,
-                                 embed=embed, k=3)
+    # Almost all of a risk factor section is carried over, and wording that was already
+    # there cannot be the filing answering a claim made this quarter.
+    only = None
+    if prior is not None:
+        current_spans = [span for _, span in risk_matcher.candidates(sections)]
+        prior_spans = [span for _, span in risk_matcher.candidates(prior)]
+        only = {n.span_id for n in novelty.added(current_spans, prior_spans)}
+    matches = risk_matcher.match(claim, sections, accession=accession,
+                                 source_url=source_url, embed=embed, k=3,
+                                 only=only)
     evidence = [{"agent": check.agent, "tier": check.tier, "stance": check.stance,
                  "tag": check.tag, "filed": str(check.filed) if check.filed is not None else None,
                  "stated": str(check.stated) if check.stated is not None else None,
@@ -84,6 +93,17 @@ def row_for(claim: Claim, *, speaker: str | None, segment: str, cik: str,
                              "filed_at": later.filed_at,
                              "months_after": later.months_after,
                              "accession": later.accession, "note": later.note})
+
+    if prior is not None and matches:
+        moved = drift.follow(next(sp for _, sp in risk_matcher.candidates(sections)
+                                  if sp.id == matches[0].span_id),
+                             [sp for _, sp in risk_matcher.candidates(prior)])
+        if moved.status != drift.NOT_FOUND:
+            evidence.append({"agent": moved.agent, "tier": moved.tier,
+                             "stance": "context", "status": moved.status,
+                             "strength_change": moved.strength_change,
+                             "prior_quote": moved.prior_quote,
+                             "similarity": moved.similarity})
 
     hedging = None
     if matches:
