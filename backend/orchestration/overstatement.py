@@ -15,7 +15,7 @@ from backend.claims.lexicon import LexiconMissing, hedging_delta
 from backend.ingestion.sections import Section
 from backend.models import Claim
 from backend.retrieval import risk_matcher
-from backend.verification import xbrl
+from backend.verification import outcomes, xbrl
 
 ABSTAIN, CONTRADICTED, CONSISTENT = "abstain", "contradicted", "consistent"
 # Above this share of what was found disagreeing, the row is reported as contradicted.
@@ -56,7 +56,7 @@ def _verdict(axes: Axes, stances: list[str]) -> str:
 def row_for(claim: Claim, *, speaker: str | None, segment: str, cik: str,
             sections: dict[str, Section], period: str | None = None,
             accession: str | None = None, source_url: str | None = None,
-            turn: str | None = None,
+            turn: str | None = None, call_date: str | None = None,
             embed: Callable[[list[str]], list[list[float]]] | None = None) -> Row:
     """One row for one claim.
 
@@ -75,6 +75,15 @@ def row_for(claim: Claim, *, speaker: str | None, segment: str, cik: str,
     evidence += [{"agent": m.agent, "tier": m.tier, "stance": "neutral", "item": m.item,
                   "quote": m.quote, "score": m.score, "method": m.method,
                   "accession": m.accession, "source_url": m.source_url} for m in matches]
+
+    if call_date:
+        later = outcomes.check(claim.id, cik, call_date)
+        if later.stance != outcomes.NOT_FOUND:
+            evidence.append({"agent": later.agent, "tier": later.tier,
+                             "stance": later.stance, "item": later.item,
+                             "filed_at": later.filed_at,
+                             "months_after": later.months_after,
+                             "accession": later.accession, "note": later.note})
 
     hedging = None
     if matches:
