@@ -16,7 +16,10 @@ SUBMISSIONS = {"filings": {"files": [{"name": OLDER_NAME}], "recent": {
 
 
 def _answers(monkeypatch, mapping):
-    monkeypatch.setattr(edgar, "read_json", lambda url: mapping[url])
+    def answer(url):
+        return OLDER if url.endswith(OLDER_NAME) else mapping[url]
+
+    monkeypatch.setattr(edgar, "read_json", answer)
 
 
 def test_a_user_agent_without_a_contact_is_refused(monkeypatch):
@@ -41,12 +44,12 @@ def test_ticker_resolves_to_a_padded_cik(monkeypatch):
 
 def test_filings_are_filtered_by_form_and_carry_a_resolvable_url(monkeypatch):
     _answers(monkeypatch, {edgar.SUBMISSIONS.format(cik="0000320193"): SUBMISSIONS})
-    [filing] = edgar.filings("320193", form="10-K")
+    [filing] = edgar.filings("320193", form="10-K", limit=1)
     assert filing.accession == "0000320193-24-000123" and filing.period == "2024-09-28"
     assert filing.url == ("https://www.sec.gov/Archives/edgar/data/320193/"
                           "000032019324000123/aapl-20240928.htm")
     # An 8-K carries no report period, and an empty string is not a period.
-    assert edgar.filings("320193", form="8-K")[0].period is None
+    assert edgar.filings("320193", form="8-K", limit=1)[0].period is None
 
 
 def test_facts_come_back_newest_first_and_an_unknown_tag_is_empty(monkeypatch):
