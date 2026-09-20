@@ -128,7 +128,12 @@ def _duration(row: dict) -> int | None:
     return (date.fromisoformat(end) - date.fromisoformat(start)).days
 
 
-def verify(claim: Claim, cik: str) -> Check:
+def verify(claim: Claim, cik: str, period: str | None = None) -> Check:
+    """Check the claim against the filed figure for its own period.
+
+    The period must be known. Without it the newest filed value would answer a claim made years
+    earlier, so a claim that names no period, and is given none, is reported as not_found.
+    """
     if claim.assertion_type in FORWARD:
         return Check(claim.id, NOT_FOUND, note="claim is about a future period")
     wording = f"{claim.metric or ''} {claim.text}"
@@ -141,15 +146,18 @@ def verify(claim: Claim, cik: str) -> Check:
     stated = stated_value(claim)
     if stated is None:
         return Check(claim.id, NOT_FOUND, note="claim states no number to check")
-    span = window(claim.period)
+    stated_period = (claim.period or "").strip() or (period or "").strip()
+    span = window(stated_period)
+    if span is None:
+        return Check(claim.id, NOT_FOUND, note="no period to compare the claim against")
     for tag in tags:
         for row in facts(cik, tag, unit=UNITS.get(tag, "USD")):
             end = row.get("end", "")
-            if span and not (span[0] <= end <= span[1]):
+            if not (span[0] <= end <= span[1]):
                 continue
             length = _duration(row)
-            if span is not None and length is not None:
-                wanted = SPANS["quarter"] if re.search(r"q[1-4]", claim.period or "", re.I) \
+            if length is not None:
+                wanted = SPANS["quarter"] if re.search(r"q[1-4]", stated_period, re.I) \
                     else SPANS["year"]
                 if not wanted[0] <= length <= wanted[1]:
                     continue

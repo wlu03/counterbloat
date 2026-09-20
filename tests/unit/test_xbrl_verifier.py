@@ -97,3 +97,14 @@ def test_a_value_naming_two_different_numbers_is_not_guessed_at():
     assert xbrl.stated_value(_claim(value="13% increase; $10.3 million")) is None
     # The same number written twice is not ambiguous.
     assert xbrl.stated_value(_claim(value="$10.3 million, or 10.3")) == Decimal("10300000")
+
+
+def test_a_claim_with_no_period_is_not_compared_with_the_newest_figure(monkeypatch):
+    _facts(monkeypatch, {"NetIncomeLoss": [
+        {"end": "2025-12-31", "start": "2025-01-01", "val": 38_640_000, "accn": "new"},
+        {"end": "2015-04-03", "start": "2015-01-03", "val": 10_333_000, "accn": "old"}]})
+    claim = _claim(metric="net income", value="$10.3 million")
+    assert xbrl.verify(claim, "0000012345").stance == xbrl.NOT_FOUND
+    # Given the period of the call, the right figure is found.
+    found = xbrl.verify(claim, "0000012345", period="2015-Q1")
+    assert found.stance == xbrl.SUPPORTS and found.accession == "old"

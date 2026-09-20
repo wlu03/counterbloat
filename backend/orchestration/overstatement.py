@@ -54,10 +54,10 @@ def _verdict(axes: Axes, stances: list[str]) -> str:
 
 
 def row_for(claim: Claim, *, speaker: str | None, segment: str, cik: str,
-            sections: dict[str, Section], accession: str | None = None,
-            source_url: str | None = None,
+            sections: dict[str, Section], period: str | None = None,
+            accession: str | None = None, source_url: str | None = None,
             embed: Callable[[list[str]], list[list[float]]] | None = None) -> Row:
-    check = xbrl.verify(claim, cik)
+    check = xbrl.verify(claim, cik, period)
     matches = risk_matcher.match(claim, sections, accession=accession, source_url=source_url,
                                  embed=embed, k=3)
     evidence = [{"agent": check.agent, "tier": check.tier, "stance": check.stance,
