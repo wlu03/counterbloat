@@ -129,10 +129,21 @@ def test_a_figure_is_read_as_a_document_writes_it():
         parse_number("about fifty")
 
 
-def test_a_bracketed_negative_in_a_passage_is_found_by_its_signed_value():
+def test_a_table_writes_a_negative_in_brackets_so_only_the_negative_is_in_it():
     span = SourceSpan(id="s", document_id="d", kind="table_row", start=0, end=40,
                       text="waterford 3 replacement steam generator provision | amount: -32 ( 32 )")
-    assert value_in_source(Decimal(-32), span) and value_in_source(Decimal(32), span)
+    assert value_in_source(Decimal(-32), span)
+    # Reading the bracketed form as a positive would let a program flip a sign without saying so.
+    assert not value_in_source(Decimal(32), span)
+
+
+def test_a_bracketed_amount_in_a_table_is_negative_and_in_a_sentence_may_not_be():
+    where = dict(id="s", document_id="d", start=0, end=40, text="Capital expenditure: (1,577).")
+    table = SourceSpan(kind="table_row", **where)
+    assert value_in_source(Decimal(-1577), table) and not value_in_source(Decimal(1577), table)
+    # Outside a table the brackets may hold an aside rather than an accounting negative.
+    sentence = SourceSpan(kind="paragraph", **where)
+    assert value_in_source(Decimal(-1577), sentence) and value_in_source(Decimal(1577), sentence)
 
 
 def test_a_step_may_name_a_scale_factor_but_no_other_number():
@@ -167,3 +178,96 @@ def test_a_scale_factor_can_be_added_to_a_value_but_two_real_units_still_cannot(
     with pytest.raises(CalculationError, match="incompatible units in add"):
         execute("n", "c", [value("a", "1", "tonnes"), value("b", "2", "kg")],
                 [CalcStep(op="add", args=["a", "b"], out="x")])
+
+
+def test_a_claim_that_states_a_bound_is_judged_against_the_bound_not_for_equality():
+    from backend.verification.numeric import claim_relation
+
+    def relation(result, expected, text):
+        return claim_relation({"x": Decimal(result)}, "x", expected, text)[1]
+
+    # A result that clears the bound agrees with it. Testing for equality would call it false.
+    assert relation("60", "40", "Revenue increased by at least 40%.") == "agrees"
+    assert relation("38", "40", "Revenue increased by at least 40%.") == "disagrees"
+    assert relation("2", "5", "The error rate is below 5%.") == "agrees"
+    assert relation("7", "5", "The error rate is below 5%.") == "disagrees"
+    assert relation("3", "5", "We emit no more than 5 tonnes.") == "agrees"
+    assert relation("120", "100", "Savings of $100 million or more.") == "agrees"
+    # A bound is read only beside the number it bounds, so a period does not become one.
+    assert relation("12", "12", "Over the past year revenue rose 12%.") == "agrees"
+    # Two endpoints do not say which one a single result should meet.
+    assert relation("50", "40", "Growth was between 40% and 45%.") == "none"
+    # The claim writes a fall as a positive number and the calculation as a negative one. Which
+    # convention the bound uses is not stated.
+    assert relation("-45", "40", "Emissions fell by more than 40%.") == "none"
+    # A claim that states a plain value is still judged to the precision it was written with.
+    assert relation("41.8", "42", "Emissions fell 42% from 2019.") == "agrees"
+    assert relation("30", "42", "Emissions fell 42% from 2019.") == "disagrees"
+
+
+def test_a_scale_factor_does_not_strip_the_period_or_population_of_what_it_scales():
+    def value(name, number, **about):
+        return CalcInput(name=name, value=Decimal(number), unit="t", source_span_id="s", **about)
+
+    # Converting units before a comparison must not hide that the two values are different plants.
+    plants = [value("pa", "10", population="Plant A"), value("pb", "20", population="Plant B")]
+    scaled = [CalcStep(op="multiply", args=["pa", "const_1"], out="ca"),
+              CalcStep(op="multiply", args=["pb", "const_1"], out="cb"),
+              CalcStep(op="compare", args=["ca", "cb"], out="d")]
+    with pytest.raises(CalculationError, match="different population or boundary"):
+        execute("n", "c", plants, scaled)
+    # Nor that the years were given to pct_change in the wrong order.
+    years = [value("y24", "100", period="2024"), value("y25", "120", period="2025")]
+    with pytest.raises(CalculationError, match="later period first"):
+        execute("n", "c", years, [CalcStep(op="multiply", args=["y25", "const_1"], out="c25"),
+                                  CalcStep(op="multiply", args=["y24", "const_1"], out="c24"),
+                                  CalcStep(op="pct_change", args=["c25", "c24"], out="d")])
+
+
+def test_two_programs_over_the_same_numbers_are_the_same_only_if_wired_the_same():
+    from backend.models import RunManifest
+    from backend.orchestration.worker import _calculations
+    from backend.providers.base import EvidenceAnalysis, InputDraft, ProgramDraft
+
+    span = SourceSpan(id="s", document_id="d", kind="paragraph", start=0, end=40,
+                      text="Revenue was 100 and cost was 50.")
+    state = _state_for_calculations()
+
+    def program(over, under, out):
+        return ProgramDraft(
+            inputs=[_draft("a", "100"), _draft("b", "50")],
+            steps=[CalcStep(op="divide", args=[over, under], out=out)],
+            claim_output=out, claim_expected="2", note="")
+
+    manifest = RunManifest(analysis_id="a", mode="live", config_hash="h")
+    both = _calculations(EvidenceAnalysis(judgments=[], answers=[],
+                                          programs=[program("a", "b", "over"),
+                                                    program("b", "a", "under")]),
+                         state, {"s": span}, manifest)
+    # a over b is 2 and b over a is 0.5. Treating them as one calculation would drop one result.
+    assert sorted(c.outputs[c.claim_output] for c in both) == [Decimal("0.5"), Decimal(2)]
+
+    # A program that fails does not reserve the numbers it read against a later, valid program.
+    manifest = RunManifest(analysis_id="a", mode="live", config_hash="h")
+    broken = program("a", "b", "x")
+    broken.steps = [CalcStep(op="divide", args=["a", "missing"], out="x")]
+    after = _calculations(EvidenceAnalysis(judgments=[], answers=[],
+                                           programs=[broken, program("a", "b", "x")]),
+                          state, {"s": span}, manifest)
+    assert [c.outputs["x"] for c in after] == [Decimal(2)]
+    assert any("calculation rejected" in r for r in manifest.rejections)
+
+
+def _draft(name, value):
+    from backend.providers.base import InputDraft
+
+    return InputDraft(name=name, value=value, unit="USD", period=None, population=None,
+                      boundary=None, source_span_id="s")
+
+
+def _state_for_calculations():
+    from backend.models import AssertionType, Claim, InvestigationState
+
+    claim = Claim(id="c", document_id="d", span_id="s0", text="Revenue was twice cost.", start=0,
+                  end=22, assertion_type=AssertionType.numerical_comparison)
+    return InvestigationState(claim=claim)

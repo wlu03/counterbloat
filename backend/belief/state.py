@@ -6,6 +6,10 @@ from backend.models import (
 )
 from backend.providers.base import QuestionAnswer, StateUpdate
 
+GATED_SUMMARY = ("The evidence gathered does not settle this claim. The assessment the model "
+                 "proposed was not supported by comparable evidence or by a calculation "
+                 "compared with the value the claim states.")
+
 
 def apply_answers(state: InvestigationState, answers: list[QuestionAnswer]) -> None:
     by_span = {e.span_id: e.id for e in state.evidence}
@@ -40,7 +44,11 @@ def apply_update(state: InvestigationState, update: StateUpdate, new_evidence_id
         # that answers a side question does not justify a verdict. Without either, the claim
         # is unresolved, not false.
         status, mechanisms = EvidenceStatus.insufficient, []
-    state.assessment = Assessment(status=status, mechanisms=mechanisms, summary=update.summary)
+    # The summary was written for the status the model proposed. When the gate rejects that
+    # status the summary states a verdict the record no longer holds, so it is replaced. The
+    # model's own wording stays in the update's explanation.
+    summary = update.summary if status == proposed else GATED_SUMMARY
+    state.assessment = Assessment(status=status, mechanisms=mechanisms, summary=summary)
     state.unresolved = update.unresolved
     state.version += 1
     return BeliefUpdate(id=f"{state.claim.id}-u{state.version}", claim_id=state.claim.id,

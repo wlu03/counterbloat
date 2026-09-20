@@ -126,12 +126,21 @@ def _items(analysis: EvidenceAnalysis, state: InvestigationState, shown: dict[st
 def _calculations(analysis: EvidenceAnalysis, state: InvestigationState,
                   shown: dict[str, SourceSpan], manifest: RunManifest) -> list[Calculation]:
     results = []
-    def key(inputs, steps):
+    def key(inputs, steps, claim_output):
         # Two programs are the same calculation when they read the same numbers from the same
-        # passages and apply the same operations. Names chosen by the model are ignored.
-        return (sorted((i.source_span_id, i.value) for i in inputs), [s.op for s in steps])
+        # passages and combine them in the same order with the same operations, and when they
+        # offer the same result to the claim. Names chosen by the model are ignored; the order of
+        # a step's arguments is not, because dividing a by b is not dividing b by a.
+        identity = {i.name: f"{i.source_span_id}={i.value}" for i in inputs}
+        position, wiring = {}, []
+        for n, step in enumerate(steps):
+            wiring.append((step.op, tuple(identity.get(a) or position.get(a) or f"?{a}"
+                                          for a in step.args)))
+            position[step.out] = f"#{n}"
+        return (sorted(identity.values()), tuple(wiring),
+                position.get(claim_output, claim_output))
 
-    done = [key(c.inputs, c.steps) for c in state.calculations]
+    done = [key(c.inputs, c.steps, c.claim_output) for c in state.calculations]
     for program in analysis.programs:
         calc_id = f"{state.claim.id}-n{len(state.calculations) + len(results)}"
         try:
@@ -141,9 +150,10 @@ def _calculations(analysis: EvidenceAnalysis, state: InvestigationState,
                 span = shown.get(value.source_span_id)
                 if span is None or not value_in_source(value.value, span):
                     raise CalculationError(f"input {value.name} is not in its cited passage")
-            if key(inputs, program.steps) in done:
-                continue  # the same calculation was already recorded
-            done.append(key(inputs, program.steps))
+            here = key(inputs, program.steps, program.claim_output)
+            if here in done:
+                manifest.rejections.append(f"calculation {calc_id} repeats one already recorded")
+                continue
             spans = [i.source_span_id for i in inputs]
             result = execute(calc_id, state.claim.id, inputs, program.steps, program.note,
                              lineage(state, spans))
@@ -151,6 +161,9 @@ def _calculations(analysis: EvidenceAnalysis, state: InvestigationState,
             result.claim_expected, result.claim_relation = claim_relation(
                 result.outputs, program.claim_output, program.claim_expected, state.claim.text)
             results.append(result)
+            # Only a calculation that ran holds the key. A program that failed leaves the same
+            # numbers free for a later program that gets the arithmetic right.
+            done.append(here)
         except (CalculationError, ValueError) as exc:
             manifest.rejections.append(f"calculation rejected: {exc}")
     return results

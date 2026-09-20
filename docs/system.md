@@ -27,6 +27,20 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
 - A claim is kept only if its quote is an exact substring of the passage it came from.
 - An evidence quote must be an exact substring of a passage that was shown to the model.
 - A calculation input must cite a passage that contains the number. Code runs the arithmetic.
+  One tokenizer decides what a written number means for both parsing and matching. In a table a
+  bracketed amount is a negative, so `(1,577)` holds -1577 and not 1577; in a sentence the
+  brackets may be an aside, so both readings are accepted there.
+- A result carries the period, population, and boundary of what it was computed from, so
+  multiplying a value by a scale factor cannot strip the metadata a later comparison checks. A
+  scale factor has no period or scope of its own and does not erase the other operand's.
+- Two programs are the same calculation only when they read the same numbers from the same
+  passages, combine them in the same order with the same operations, and offer the same result
+  to the claim. `divide(a, b)` and `divide(b, a)` are different calculations. A program that
+  failed to execute does not block a later program over the same numbers.
+- A claim that states a bound, such as "at least 40%" or "below 5%", is tested against the bound
+  and not for equality. A bound counts only where it is written beside the number it bounds. A
+  claim that states two endpoints, and a result whose sign convention differs from the claim's,
+  are recorded as not testing the claim.
 - Evidence measured on a different basis from the claim is recorded as qualifying it, not contradicting it.
 - Identical passages, and passages the analyst marks as repeating another, join one provenance group.
 - Evidence, answers, and verified calculations of a round are recorded before the updater runs.
@@ -44,7 +58,9 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
 - A verdict needs admitted, comparable evidence about the claim in its own direction, or a
   calculation whose result code compared with the value the claim states. A calculation that
   answers a side question does not justify a verdict. Otherwise the status becomes
-  `insufficient`. A review can weaken a verdict but not strengthen it.
+  `insufficient`. A review can weaken a verdict but not strengthen it. The summary was written
+  for the status the model proposed, so when the gate rejects that status the summary is
+  replaced with a fixed sentence. The model's own wording stays in the update's explanation.
 - When the review asks for a check, the request becomes a critical question and gets at most
   `max_follow_up_rounds` further rounds, then a second review. A check that was still not
   completed is listed in the finding. The report is written from the reviewed assessment.
@@ -127,7 +143,9 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
   commits to fewer claims and is less often right when it commits. See
   `docs/evaluation_protocol.md`. What it does give is grounding: on FinQA every figure it used
   was verifiably in the passage it cited.
-- No result has been measured on any dataset. No dataset file is present in this repository.
-  FinQA and FinanceBench are questions, not claims, so the verification runner does not take
-  them. GreenClaims accusations are annotations, not adjudicated labels, so no metric is
+- No dataset file is present in this repository; `datasets/*/downloads/` and the labels are
+  ignored by git. The results that have been measured are in `docs/evaluation_protocol.md`, on
+  samples of 40 to 60 claims. FinQA and FinanceBench are questions, not claims, so the
+  verification runner does not take them; FinQA is run by `evaluation/experiments/finqa.py`
+  instead. GreenClaims accusations are annotations, not adjudicated labels, so no metric is
   computed from them.

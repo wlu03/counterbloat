@@ -43,11 +43,30 @@ def parse_number(text: str) -> Decimal:
     return -value if negative else value
 
 
+# A number as a document writes it, including the bracketed form a table uses for a negative.
+# A hyphen after a word character is a range dash, so "5-10" holds 5 and 10, not -10.
+_IN_SOURCE = re.compile(r"\(\s*(?:US|C|A|HK)?[$€£¥]?\s*\d[\d,]*\.?\d*\s*%?\s*\)"
+                        r"|(?<!\w)-?(?:US|C|A|HK)?[$€£¥]?\s?\d[\d,]*\.?\d*")
+
+
 def value_in_source(value: Decimal, span: SourceSpan) -> bool:
-    """True when the input's number appears in the span it cites."""
-    # A hyphen after a word character is a range dash, so "5-10" holds 5 and 10, not -10.
-    numbers = re.findall(r"(?<!\w)-?\d[\d,]*\.?\d*|\d[\d,]*\.?\d*", span.text)
-    return any(parse_number(n) == value for n in numbers)
+    """True when the input's number appears in the span it cites.
+
+    A table writes a negative in brackets, so "(1,577)" is the value -1577 and not 1577. In
+    running text brackets usually hold an aside, so there both readings are accepted; only the
+    same tokenizer that `parse_number` uses decides what the digits mean.
+    """
+    for written in _IN_SOURCE.findall(span.text):
+        try:
+            found = parse_number(written)
+        except CalculationError:
+            continue
+        if found == value:
+            return True
+        # Outside a table a bracketed number may be an aside rather than a negative.
+        if span.kind != "table_row" and found < 0 and written.strip().startswith("(") and -found == value:
+            return True
+    return False
 
 
 def _words(unit: str) -> set[str]:
@@ -74,12 +93,52 @@ def _year(period: str | None) -> int | None:
     return int(found.group(1)) if found else None
 
 
+# Wordings that state a bound instead of a value. "At least 40%" is not the claim that the figure
+# is 40%, so testing it for equality reads a satisfied bound as a contradiction.
+_BEFORE = {"no less than": "ge", "not less than": "ge", "at least": "ge", "a minimum of": "ge",
+           "minimum of": "ge", "more than": "gt", "greater than": "gt", "over": "gt",
+           "above": "gt", "exceeds": "gt", "exceeded": "gt", "exceeding": "gt", "exceed": "gt",
+           "no more than": "le", "not more than": "le", "at most": "le", "a maximum of": "le",
+           "maximum of": "le", "up to": "le", "within": "le",
+           "less than": "lt", "fewer than": "lt", "under": "lt", "below": "lt", "beneath": "lt"}
+_AFTER = {"more": "ge", "higher": "ge", "greater": "ge", "above": "ge",
+          "less": "le", "fewer": "le", "lower": "le", "below": "le"}
+# A bound counts only next to the number it bounds. Anything between the two may be a hedge or a
+# currency sign, so "over the past year revenue rose 12%" states no bound and "over $40" does.
+_BOUND_BEFORE = re.compile(
+    r"\b(" + "|".join(sorted(_BEFORE, key=len, reverse=True)).replace(" ", r"\s+") + r")\s+"
+    r"(?:about|approximately|roughly|nearly|almost|around|some|another)?\s*"
+    r"(?:US|C|A|HK)?[$€£¥]?\s*$", re.I)
+# The same next to the number, allowing the unit and scale that follow it: "$100 million or more".
+_BOUND_AFTER = re.compile(r"^[\s%]*(?:[A-Za-z]+\s+){0,3}or\s+(" + "|".join(_AFTER) + r")\b", re.I)
+# Two endpoints, not one value. Which endpoint a single result should be tested against is not
+# stated, so the calculation does not test the claim.
+_RANGE = re.compile(r"\b(?:between|range|ranging|from)\b[^.]{0,40}$", re.I)
+_SATISFIES = {"ge": lambda r, e, t: r >= e - t, "gt": lambda r, e, t: r > e - t,
+              "le": lambda r, e, t: r <= e + t, "lt": lambda r, e, t: r < e + t}
+
+
+def _bound(claim_text: str, at: int, length: int) -> str | None:
+    """The comparator the claim applies to the number at this position, or None for a plain value."""
+    before, after = claim_text[:at], claim_text[at + length:]
+    if _RANGE.search(before):
+        return "range"
+    found = _BOUND_BEFORE.search(before)
+    if found:
+        return _BEFORE[re.sub(r"\s+", " ", found.group(1).lower())]
+    found = _BOUND_AFTER.search(after)
+    return _AFTER[found.group(1).lower()] if found else None
+
+
 def claim_relation(outputs: dict[str, Decimal], claim_output: str | None,
                    claim_expected: str | None, claim_text: str) -> tuple[Decimal | None, str]:
     """Compare the named output with the value the claim states.
 
-    The expected value must be a number written in the claim. Agreement is judged to the
-    precision of that number, so a stated 40 agrees with 39.6 and not with 38.
+    The expected value must be a number written in the claim. A claim that states a plain value is
+    judged to the precision of that number, so a stated 40 agrees with 39.6 and not with 38. A
+    claim that states a bound, such as "at least 40%", is judged by whether the result meets the
+    bound. Where the contract is not clear, the result is "none" and the calculation does not test
+    the claim.
     """
     if not claim_output or claim_output not in outputs or not claim_expected:
         return None, "none"
@@ -87,13 +146,22 @@ def claim_relation(outputs: dict[str, Decimal], claim_output: str | None,
         expected = parse_number(claim_expected)
     except CalculationError:
         return None, "none"
-    written = [n for n in re.findall(r"\d[\d,]*\.?\d*", claim_text)
-               if abs(parse_number(n)) == abs(expected)]
+    written = [m for m in re.finditer(r"\d[\d,]*\.?\d*", claim_text)
+               if abs(parse_number(m.group())) == abs(expected)]
     if not written:
         return None, "none"
     # The precision comes from the claim's own wording, not from how the model wrote the value.
-    tolerance = Decimal(1).scaleb(int(parse_number(written[0]).as_tuple().exponent)) / 2
-    result = outputs[claim_output]
+    here = written[0]
+    tolerance = Decimal(1).scaleb(int(parse_number(here.group()).as_tuple().exponent)) / 2
+    result, bound = outputs[claim_output], _bound(claim_text, here.start(), len(here.group()))
+    if bound == "range":
+        return None, "none"
+    if bound:
+        if (result < 0) != (expected < 0) and result and expected:
+            # A fall written as a negative number and a bound written as a positive one. Which
+            # convention the bound uses is not stated, so the calculation does not test it.
+            return None, "none"
+        return expected, "agrees" if _SATISFIES[bound](result, expected, tolerance) else "disagrees"
     if abs(result - expected) <= tolerance:
         return expected, "agrees"
     if abs(abs(result) - abs(expected)) <= tolerance:
@@ -134,9 +202,13 @@ def execute(calc_id: str, claim_id: str, inputs: list[CalcInput], steps: list[Ca
             if len(scopes) > 1 and step.op in SAME_SCOPE_OPS:
                 raise CalculationError(f"different population or boundary in {step.op}")
         x0, x1 = args[0], args[1]
-        shared = {periods.get(a) for a in step.args}
-        # A result of values from one period belongs to that period.
-        periods[step.out] = shared.pop() if len(shared) == 1 else None
+        # A result of values from one period belongs to that period. A scale factor has no period
+        # of its own, so it does not erase the period of the value it scales.
+        dated = {periods.get(a) for a in step.args if periods.get(a)}
+        periods[step.out] = dated.pop() if len(dated) == 1 else None
+        # The same for population and boundary, so a derived value can still be compared.
+        named = {scope[a] for a in step.args if a in scope and any(scope[a])}
+        scope[step.out] = named.pop() if len(named) == 1 else (None, None)
         if step.op in ("pct_change", "reduction"):
             base, later = (_year(periods.get(a)) for a in step.args[:2])
             if base and later and base > later:

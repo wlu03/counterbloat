@@ -206,3 +206,20 @@ def test_a_supplied_claim_is_normalised_the_way_its_document_was(store):
     [claim] = structure(raw, spans, Reader(), manifest)
     assert claim.text == "The main greenhouse gas is water vapour[...]"
     assert claim.text in spans[0].text and manifest.rejections == []
+
+
+def test_a_summary_written_for_a_verdict_the_gate_rejects_is_not_kept():
+    from backend.belief.state import GATED_SUMMARY
+
+    state = InvestigationState(claim=_claim())
+    proves = StateUpdate(status=EvidenceStatus.contradicted, mechanisms=[],
+                         summary="The evidence proves this claim false.", unresolved=[],
+                         explanation="e")
+    record = apply_update(state, proves, [], [], "v")
+    # No comparable evidence contradicts the claim, so the gate writes insufficient. Keeping the
+    # model's sentence would leave the report asserting a verdict the record does not hold.
+    assert record.new_status == EvidenceStatus.insufficient
+    assert record.proposed_status == EvidenceStatus.contradicted
+    assert state.assessment.summary == GATED_SUMMARY
+    # The model's own wording is still on the record, in the update it belongs to.
+    assert proves.summary not in state.assessment.summary
