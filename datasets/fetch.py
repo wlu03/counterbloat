@@ -10,11 +10,19 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import tarfile
 import urllib.request
 from pathlib import Path
 
 QUANTEMP = "https://raw.githubusercontent.com/factiverse/QuanTemp/main/data"
 CLIMATE_FEVER = "https://raw.githubusercontent.com/tdiggelm/climate-fever-dataset/main/dataset"
+CODELOAD = "https://codeload.github.com/{repo}/tar.gz/{commit}"
+MAEC_REPO = ("Earnings-Call-Dataset/"
+             "MAEC-A-Multimodal-Aligned-Earnings-Conference-Call-Dataset-for-Financial-Risk-"
+             "Prediction")
+
+# Read sentence by sentence rather than split into labelled examples, so they have no adapter.
+CORPORA = {"maec", "mdrm"}
 
 SOURCES = {
     "quantemp": {
@@ -41,6 +49,26 @@ SOURCES = {
             "fact_checkers.json": (
                 f"{QUANTEMP}/fact_checkers.json",
                 "bb9f0939db2596ca85b071f158b8b35f87608e5af61e5ad2a5a12ab334b8d90a"),
+        },
+    },
+    "maec": {
+        "page": f"https://github.com/{MAEC_REPO}",
+        "license": "CC-BY-SA-4.0",
+        "files": {
+            "maec.tar.gz": (
+                CODELOAD.format(repo=MAEC_REPO,
+                                commit="65a109f5b1a8cb4c96e8337b749ce3db41f2c210"),
+                "7de73134b5ba8d521e804ef751fd09e64b33cda09cd79549f4fb33a103c74373"),
+        },
+    },
+    "mdrm": {
+        "page": "https://github.com/GeminiLn/EarningsCall_Dataset",
+        "license": "unverified",
+        "files": {
+            "mdrm.tar.gz": (
+                CODELOAD.format(repo="GeminiLn/EarningsCall_Dataset",
+                                commit="e168672f60c9adab38cd3004048e4af656e79f24"),
+                "1214d122504743183f8798b6047b9242c6463c00c927faef9cdd842b84e8c9c2"),
         },
     },
     "climate_fever": {
@@ -71,6 +99,10 @@ def fetch(dataset: str, out: str | Path = "datasets") -> Path:
             raise ValueError(f"{name} SHA256 is {digest}, not the recorded {expected}")
         path.write_bytes(body)
         print(f"wrote {path} ({len(body)/1e6:.1f} MB)")
+        if name.endswith(".tar.gz"):
+            with tarfile.open(path) as archive:
+                archive.extractall(directory, filter="data")
+            print(f"unpacked {path}")
     print(f"{dataset}: license {source['license']}; see {source['page']}")
     return directory
 

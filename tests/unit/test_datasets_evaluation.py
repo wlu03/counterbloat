@@ -178,6 +178,6 @@ def test_a_changed_upstream_file_is_refused(tmp_path, monkeypatch):
         dataset_fetch.fetch("probe", tmp_path)
 
 
-def test_every_fetchable_dataset_has_an_adapter():
+def test_every_fetchable_dataset_is_an_adapter_or_a_corpus():
     from datasets.prepare import ADAPTERS
-    assert set(dataset_fetch.SOURCES) <= set(ADAPTERS)
+    assert set(dataset_fetch.SOURCES) - dataset_fetch.CORPORA <= set(ADAPTERS)
