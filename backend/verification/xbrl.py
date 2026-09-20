@@ -85,7 +85,15 @@ def stated_value(claim: Claim) -> Decimal | None:
     if not numbers:
         return None
     if len({n.replace(",", "") for n in numbers}) > 1:
-        return None
+        # An amount is written with a currency mark or a scale word; a rate of change is not.
+        # When exactly one number is written that way, it is the one a filed figure answers.
+        amounts = re.findall(r"[$\u00a3\u20ac]\s*(-?\d[\d,]*\.?\d*)"
+                             r"|(-?\d[\d,]*\.?\d*)\s*(?:thousand|million|billion|trillion)",
+                             raw, re.I)
+        picked = {a or b for a, b in amounts}
+        if len(picked) != 1:
+            return None
+        numbers = [picked.pop()]
     try:
         value = Decimal(numbers[0].replace(",", ""))
     except InvalidOperation:

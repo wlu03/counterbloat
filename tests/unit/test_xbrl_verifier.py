@@ -92,11 +92,17 @@ def test_an_annual_figure_cannot_answer_a_quarterly_claim(monkeypatch):
     assert check.stance == xbrl.NOT_FOUND
 
 
-def test_a_value_naming_two_different_numbers_is_not_guessed_at():
-    # "13% increase; $10.3 million" could be checked against either number.
-    assert xbrl.stated_value(_claim(value="13% increase; $10.3 million")) is None
+def test_the_amount_is_taken_over_the_rate_of_change():
+    # Only one of these is written as money, and that is what a filed figure answers.
+    assert xbrl.stated_value(_claim(value="13% increase; $10.3 million")) == Decimal("10300000")
+    assert xbrl.stated_value(_claim(value="up 4% to 73 million")) == Decimal("73000000")
     # The same number written twice is not ambiguous.
     assert xbrl.stated_value(_claim(value="$10.3 million, or 10.3")) == Decimal("10300000")
+
+
+def test_two_amounts_in_one_value_are_still_not_guessed_at():
+    assert xbrl.stated_value(_claim(value="$10.3 million versus $9.1 million")) is None
+    assert xbrl.stated_value(_claim(value="grew 13% from 4%")) is None
 
 
 def test_a_claim_with_no_period_is_not_compared_with_the_newest_figure(monkeypatch):
