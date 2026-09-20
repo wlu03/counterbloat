@@ -50,6 +50,12 @@ class Store:
             conn.execute(t.delete().where(t.c.id == record_id))
             conn.execute(t.insert().values(id=record_id, data=payload, **keys))
 
+    def remove(self, table: str, **keys: str) -> None:
+        """Delete the records whose key columns have these values."""
+        t = TABLES[table]
+        with self.engine.begin() as conn:
+            conn.execute(t.delete().where(*[t.c[key] == value for key, value in keys.items()]))
+
     def update(self, table: str, record_id: str, data: BaseModel | dict) -> None:
         """Replace the record and leave its key columns as they are."""
         payload = data.model_dump(mode="json") if isinstance(data, BaseModel) else data

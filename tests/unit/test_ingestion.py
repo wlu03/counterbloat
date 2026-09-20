@@ -111,3 +111,54 @@ def test_long_plain_text_is_split_at_sentence_ends():
     assert len(spans) > 1 and all(len(s.text) <= 850 for s in spans)
     assert all(s.text.endswith(".") for s in spans)
     assert " ".join(s.text for s in spans) == text
+
+
+# The layout of a table in an SEC filing: an empty sizing row, period labels in ordinary cells that
+# span three columns, and each figure split into cells for the currency sign, the number, and the
+# percent sign, with empty spacer cells between the groups.
+FILING_TABLE = b"""<table>
+<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td colspan="3"></td><td colspan="3">2025</td><td colspan="3"></td><td colspan="3">Change</td></tr>
+<tr><td colspan="3">Americas</td><td>$</td><td>178,353</td><td></td><td colspan="3"></td><td colspan="2">7</td><td>%</td></tr>
+<tr><td colspan="3">Greater China</td><td colspan="2">64,377</td><td></td><td colspan="3"></td><td colspan="2">(4)</td><td>%</td></tr>
+<tr><td colspan="3">Total net sales</td><td>$</td><td>416,161</td><td></td><td colspan="3"></td><td colspan="2">6</td><td>%</td></tr>
+</table>"""
+
+
+def test_filing_tables_keep_their_period_labels_and_join_signs_to_numbers():
+    assert _texts(FILING_TABLE) == ["Americas | 2025: $178,353 | Change: 7%",
+                                    "Greater China | 2025: 64,377 | Change: (4)%",
+                                    "Total net sales | 2025: $416,161 | Change: 6%"]
+
+
+def test_header_rows_stack_and_a_bracketed_note_is_kept_with_every_row():
+    html = (b"<table><tr><td>(in millions)</td><td colspan='2'>Three Months Ended</td></tr>"
+            b"<tr><td></td><td>June 28, 2025</td><td>June 29, 2024</td></tr>"
+            b"<tr><td>Net sales:</td><td></td><td></td></tr>"
+            b"<tr><td>Products</td><td>66,613</td><td>61,564</td></tr></table>")
+    assert _texts(html) == [
+        "(in millions) | Net sales:",
+        "(in millions) | Products | Three Months Ended June 28, 2025: 66,613 | "
+        "Three Months Ended June 29, 2024: 61,564"]
+
+
+def test_a_table_without_a_header_row_keeps_its_first_row_as_data():
+    html = b"<table><tr><td>2026</td><td>$</td><td>12,393</td></tr><tr><td>2027</td><td></td><td>10,078</td></tr></table>"
+    assert _texts(html) == ["2026 | $12,393", "2027 | 10,078"]
+    names = b"<table><tr><td>Name</td><td>Title</td></tr><tr><td>A. Person</td><td>Chief Executive Officer</td></tr></table>"
+    assert _texts(names) == ["A. Person | Title: Chief Executive Officer"]
+
+
+def test_a_document_parsed_again_by_a_newer_parser_loses_its_older_passages(store, monkeypatch):
+    from backend.ingestion import parse as parser
+    from backend.ingestion.snapshot import admit
+    from backend.models import SourceSpan
+
+    monkeypatch.setattr(parser, "PARSER_VERSION", "parse-older")
+    snapshot, _ = admit(store, FILING_TABLE, "text/html")
+    store.put("spans", f"{snapshot.id}-s99", SourceSpan(id=f"{snapshot.id}-s99", document_id=snapshot.id,
+              kind="table_row", text="left by the older parser", start=0, end=1), document_id=snapshot.id)
+    monkeypatch.setattr(parser, "PARSER_VERSION", "parse-newer")
+    again, spans = admit(store, FILING_TABLE, "text/html")
+    stored = store.find("spans", SourceSpan, document_id=snapshot.id)
+    assert again.parser_version == "parse-newer" and [s.id for s in stored] == [s.id for s in spans]

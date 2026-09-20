@@ -43,6 +43,10 @@ def admit(store: Store, content: bytes, media_type: str, url: str | None = None,
         retrieved_at=datetime.now(UTC), admissible_from=admissible_from or published_at,
         parser_version=parser.PARSER_VERSION, quality_flags=flags)
     store.put("documents", document_id, snapshot)
+    if existing is not None and existing.parser_version != parser.PARSER_VERSION:
+        # A newer parser numbers passages differently, so the older passages are replaced. An
+        # analysis made before this still cites the older numbering.
+        store.remove("spans", document_id=document_id)
     for span in spans:
         store.put("spans", span.id, span, document_id=document_id)
     return snapshot, spans

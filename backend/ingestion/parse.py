@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import io
 import re
-from itertools import accumulate
 import unicodedata
 import zlib
 from types import SimpleNamespace
@@ -13,7 +12,7 @@ from lxml import html
 
 from backend.models import SourceSpan, TableCell, TableRow
 
-PARSER_VERSION = "parse-v1"
+PARSER_VERSION = "parse-v2"
 MAX_INFLATED = 200_000_000
 MAX_PASSAGE_CHARS = 800
 _DROP = ("script", "style", "noscript", "template", "iframe")
@@ -56,29 +55,103 @@ def _span(cell) -> int:
     return int(value) if re.fullmatch(r"[1-9]\d?", value) else 1  # 1 to 99; anything else is 1
 
 
+_SYMBOL = re.compile(r"(?:US|C|A|HK)?[$€£¥]")  # a currency sign in a cell of its own
+_CLOSER = re.compile(r"[)%]+|pts|bps")           # a sign in its own cell that ends the value before it
+_VALUE = re.compile(r"\(?-?(?:US|C|A|HK)?[$€£¥]?\s?\d[\d,]*(?:\.\d+)?\s?%?\)?%?")
+_YEAR = re.compile(r"(?:19|20)\d{2}")
+
+Cell = tuple[int, int, str, bool]  # first column, last column, text, whether it is a <th>
+
+
+def _grid(row) -> list[Cell]:
+    """The cells of one row placed on the table's column grid. A colspan widens a cell."""
+    cells, column = [], 0
+    for cell in row.findall("./*"):
+        width = _span(cell)
+        cells.append((column, column + width - 1, _visible_text(cell), cell.tag == "th"))
+        column += width
+    return cells
+
+
+def _label(cells: list[Cell]) -> str:
+    return cells[0][2] if cells and cells[0][0] == 0 else ""
+
+
+def _is_value(text: str) -> bool:
+    # A year is a column label far more often than it is a figure.
+    return bool(_VALUE.fullmatch(text) or _SYMBOL.fullmatch(text)) and not _YEAR.fullmatch(text)
+
+
+def _header_rows(rows: list[list[Cell]]) -> int:
+    """How many leading rows are header rows.
+
+    A row of <th> cells is a header row. So is a row that holds no figure, when its first cell is
+    empty (filings put period labels in ordinary cells above the figures) or when it is the first
+    row with a label and another row follows it.
+    """
+    count, labelled = 0, False
+    for position, cells in enumerate(rows):
+        filled = [c for c in cells if c[2]]
+        others = [c for c in filled if c[0] != 0]
+        th_row = all(c[3] for c in filled)
+        plain = bool(others) and not any(_is_value(c[2]) for c in others)
+        first_labelled = bool(_label(cells)) and not labelled and position + 1 < len(rows)
+        if not (th_row or (plain and (not _label(cells) or first_labelled))):
+            break
+        labelled = labelled or bool(_label(cells))
+        count += 1
+    return count
+
+
+def _values(cells: list[Cell]) -> list[tuple[int, str]]:
+    """The non-empty cells after the label as (column, text).
+
+    Filings put a currency sign, the number, and a percent sign or closing bracket in cells of
+    their own. The signs are joined to their number, and the value keeps the number's column.
+    """
+    values: list[list] = []
+    sign = ""
+    for first, _, text, _ in cells:
+        if not text or first == 0:
+            continue
+        if _SYMBOL.fullmatch(text):
+            sign = text
+        elif _CLOSER.fullmatch(text) and values:
+            values[-1][1] += text
+        else:
+            values.append([first, sign + text])
+            sign = ""
+    return [(column, text) for column, text in values]
+
+
 def _table_rows(table) -> list[tuple[str, TableRow]]:
     caption = table.find("./caption")
     caption_text = _visible_text(caption) if caption is not None else None
     # Rows of a nested table belong to that table, which is visited on its own.
-    rows = [r for r in table.iter("tr") if next(r.iterancestors("table")) is table]
-    if not rows:
-        return []
-    # A header cell that spans several columns labels each of them.
-    headers = [text for cell in rows[0].findall("./*")
-               for text in [_visible_text(cell)] * _span(cell)]
+    rows = [_grid(r) for r in table.iter("tr") if next(r.iterancestors("table")) is table]
+    rows = [cells for cells in rows if any(c[2] for c in cells)]  # drops empty sizing rows
+    split = _header_rows(rows)
+    headers = rows[:split]
+
+    def heading(column: int) -> str:
+        # Header rows are read top to bottom, so "Three Months Ended" comes before its date. A
+        # header cell that spans several columns labels each of them.
+        found = [c[2] for cells in headers for c in cells if c[0] <= column <= c[1] and c[2]]
+        return " ".join(dict.fromkeys(found))
+
+    if caption_text is None and re.fullmatch(r"\(.+\)", heading(0)):
+        # A bracketed note in the label column of the header rows, such as "(in millions)",
+        # applies to every row, so it is kept with each of them. A column name is not.
+        caption_text = heading(0)
     result = []
-    for row in rows[1:]:
-        found = row.findall("./*")
-        cells = [_visible_text(cell) for cell in found]
-        if not cells or not any(cells):
-            continue
-        columns = accumulate(_span(cell) for cell in found)  # the column where the next cell starts
-        pairs = [TableCell(header=headers[i] if i < len(headers) else "", text=cell)
-                 for i, cell in zip(columns, cells[1:])]
-        record = TableRow(caption=caption_text, row_label=cells[0], cells=pairs)
+    for cells in rows[split:]:
+        # The number's own column is looked up first, then the column of its currency sign.
+        pairs = [TableCell(header=heading(column) or heading(column - 1), text=text)
+                 for column, text in _values(cells)]
+        record = TableRow(caption=caption_text, row_label=_label(cells), cells=pairs)
         # The row text keeps the label, headers, and units together so they are retrieved as one.
-        text = " | ".join(filter(None, [caption_text, cells[0]]
-                                 + [f"{p.header}: {p.text}" for p in pairs]))
+        text = " | ".join(filter(None, [caption_text, _label(cells)]
+                                 + [f"{p.header}: {p.text}" if p.header else p.text for p in pairs]))
         result.append((text, record))
     return result
 
