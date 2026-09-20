@@ -62,9 +62,7 @@ def test_the_pipeline_runs_without_the_gold_file_and_is_scored_afterwards(tmp_pa
     assert baseline["status"] == "insufficient" and baseline["score"] is None
     assert baseline["embedding_search"] is False and pipeline["target"] == "averitec-refuted"
     assert pipeline["status"] == "contradicted" and 0.5 < pipeline["score"] < 1
-    # The whole corpus fits, so the pipeline shows every passage and searches nothing; with no
-    # search there is nothing to report about vector search.
-    assert pipeline["embedding_search"] is None
+    assert pipeline["embedding_search"] is False  # the run states that no vector search took place
 
     result = score([pipeline], labels, TASK)
     assert result["status_agreement"] == 1.0 and result["with_score"] == 1
