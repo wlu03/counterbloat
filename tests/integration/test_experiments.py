@@ -194,3 +194,20 @@ def test_a_claim_that_never_ran_is_counted_beside_the_rates_it_is_left_out_of():
     assert result["status_agreement_all"] == pytest.approx(1 / 5)
     assert result["coverage"] == pytest.approx(2 / 3)
     assert result["coverage_all"] == pytest.approx(2 / 5)
+
+
+def test_an_abstention_is_separated_by_whether_evidence_was_in_hand():
+    def prediction(example_id, comparable):
+        return {"id": example_id, "status": "insufficient", "score": None, "target": None,
+                "calls": {}, "failed_calls": 0, "latency_ms": 0, "skipped_by_router": 0,
+                "compression_fallbacks": 0, "tokens_by_model": {},
+                "admitted": {"evidence": comparable, "comparable": comparable,
+                             "calculations": 0, "tested": 0, "rounds": 1, "stop_reason": None}}
+
+    predictions = [prediction("a", 3), prediction("b", 0), prediction("c", 1)]
+    result = score(predictions, [{"id": i, "label": "Refuted"} for i in "abc"], TASK)
+    assert result["abstained"] == 3
+    # Two abstained while holding comparable evidence about the claim, so those are the
+    # updater's judgment rather than a retrieval failure.
+    assert result["abstained_holding_evidence"] == 2
+    assert result["abstained_empty_handed"] == 1

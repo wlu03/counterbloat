@@ -109,7 +109,7 @@ def verify(row: dict, llm_factory: Callable, searchable: dict[str, list[dict]],
     deps = Deps(store=store, index=index, llm_factory=llm_factory, router=router,
                 compressor=compressor, target=task.target, task=task.rubric,
                 settings=settings if system == "A1" else settings_for(system, settings))
-    score, stage = None, {}
+    score, stage, admitted = None, {}, {}
     status: str
     if system == "A1":
         manifest = RunManifest(analysis_id=str(row["id"]), mode=Mode.frozen, config_hash="")
@@ -134,6 +134,14 @@ def verify(row: dict, llm_factory: Callable, searchable: dict[str, list[dict]],
         stage = {"proposed": updates[-1].get("proposed_status") if updates else None,
                  "before_review": findings[0].status_before_review if findings else None,
                  "review": findings[0].review_decision if findings else None}
+        # What the updater had in hand. An abstention with evidence admitted is a judgment; an
+        # abstention with none is a retrieval failure, and the rates alone cannot tell them apart.
+        if states:
+            comparable = [e for e in states[0].evidence if e.comparable and e.target == "claim"]
+            admitted = {"evidence": len(states[0].evidence), "comparable": len(comparable),
+                        "calculations": len(states[0].calculations),
+                        "tested": sum(c.claim_relation != "none" for c in states[0].calculations),
+                        "rounds": states[0].round, "stop_reason": states[0].stop_reason}
         failed = (store.get("analyses", "run") or {}).get("status") == "failed" or (
             not findings and manifest.errors) or any(
             s.stop_reason == "provider_error" for s in states)
@@ -207,6 +215,12 @@ def score(predictions: list[dict], gold: list[dict], task: VerificationTask | No
     # How often abstaining was the right call, where the dataset has a class for it.
     result["abstention_precision"] = (sum(e == "insufficient" for _, e in abstained) / len(abstained)
                                       if abstained else None)
+    # An abstention while comparable evidence about the claim was in hand is a judgment the
+    # updater made, not evidence the retrieval failed to find. Separating the two says which
+    # part of the pipeline the abstentions belong to.
+    holding = [p for p, _ in abstained if p.get("admitted", {}).get("comparable")]
+    result["abstained_holding_evidence"] = len(holding)
+    result["abstained_empty_handed"] = len(abstained) - len(holding)
     if ran:
         counts = Counter(expected)
         best, seen = counts.most_common(1)[0]
