@@ -25,6 +25,7 @@ def apply_update(state: InvestigationState, update: StateUpdate, new_evidence_id
     """Commit a validated assessment. The caller has already recorded evidence and calculations."""
     previous = state.assessment.status
     status, mechanisms = update.status, update.mechanisms
+    proposed = update.status  # what the model asked for, before the gate below
     # Only evidence about the claim itself counts. Support for a side question does not.
     inactive = {g.id for g in state.groups if not g.active}
     backed = {e.relationship for e in state.evidence
@@ -44,6 +45,7 @@ def apply_update(state: InvestigationState, update: StateUpdate, new_evidence_id
     state.version += 1
     return BeliefUpdate(id=f"{state.claim.id}-u{state.version}", claim_id=state.claim.id,
                         version=state.version, previous_status=previous, new_status=status,
+                        proposed_status=proposed,
                         changed_evidence_ids=new_evidence_ids,
                         changed_calculation_ids=new_calculation_ids,
                         explanation=update.explanation,

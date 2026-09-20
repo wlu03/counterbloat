@@ -154,3 +154,25 @@ def test_a_seed_samples_rows_instead_of_taking_the_first_ones(tmp_path):
     assert sampled != [0, 1, 2, 3, 4] and len(set(sampled)) == 5
     assert sampled == [r["id"] for r in _read(source, 5, seed=7)]      # the same seed, the same rows
     assert len(_read(source, 500, seed=7)) == 100                      # a sample larger than the file
+
+
+def test_the_score_reports_coverage_selective_accuracy_and_the_floor_to_beat():
+    def prediction(status):
+        return {"id": status, "status": status, "score": None, "target": None, "calls": {},
+                "failed_calls": 0, "latency_ms": 0, "skipped_by_router": 0,
+                "compression_fallbacks": 0, "tokens_by_model": {}}
+
+    task = VERIFICATION["climate_fever"]
+    # Gold: two REFUTES, one NOT_ENOUGH_INFO. The system commits twice and is right once.
+    predictions = [prediction("contradicted"), prediction("supported"), prediction("insufficient")]
+    gold = [{"id": "contradicted", "claim_label": "REFUTES"},
+            {"id": "supported", "claim_label": "REFUTES"},
+            {"id": "insufficient", "claim_label": "NOT_ENOUGH_INFO"}]
+    result = score(predictions, gold, task)
+    assert result["committed"] == 2 and result["coverage"] == pytest.approx(2 / 3)
+    assert result["accuracy_when_committed"] == pytest.approx(0.5)
+    assert result["abstained"] == 1 and result["abstention_precision"] == pytest.approx(1.0)
+    # Answering "contradicted" every time would score 2 of 3, which this system only matches.
+    assert result["majority_class"] == "contradicted"
+    assert result["majority_class_accuracy"] == pytest.approx(2 / 3)
+    assert result["status_agreement"] == pytest.approx(2 / 3)

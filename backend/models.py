@@ -279,6 +279,9 @@ class BeliefUpdate(BaseModel):
     version: int
     previous_status: EvidenceStatus
     new_status: EvidenceStatus
+    # What the updater itself proposed, before the verdict gate. When it differs from new_status,
+    # the gate is what produced the recorded status and not the model.
+    proposed_status: EvidenceStatus | None = None
     changed_evidence_ids: list[str]
     changed_calculation_ids: list[str] = []
     explanation: str
@@ -312,6 +315,10 @@ class Finding(BaseModel):
     uncertainty: Uncertainty = Field(default_factory=Uncertainty)
     probability: float | None = None
     probability_status: str = "not_calibrated_for_this_target"
+    # The status the investigation reached, and the reviewer's own decision, before the review
+    # was applied. Together with proposed_status these say which stage produced the finding.
+    status_before_review: EvidenceStatus | None = None
+    review_decision: str | None = None
     review_status: ReviewState = ReviewState.draft
     evidence_cutoff: datetime | None = None
     stop_reason: str | None = None

@@ -81,6 +81,8 @@ def finalize(state: InvestigationState, spans: dict[str, SourceSpan], llm: LLM,
                       calculation_ids=[c.id for c in state.calculations],
                       evidence_cutoff=cutoff, stop_reason=state.stop_reason)
     finding.uncertainty = Uncertainty(critical_missing_questions=critical_open(state.questions))
+    finding.status_before_review = state.assessment.status
+    finding.review_decision = review.decision if review else None
     errors = citation_errors(state, spans)
     if errors:
         finding.review_status = ReviewState.blocked

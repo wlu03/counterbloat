@@ -109,7 +109,7 @@ def verify(row: dict, llm_factory: Callable, searchable: dict[str, list[dict]],
     deps = Deps(store=store, index=index, llm_factory=llm_factory, router=router,
                 compressor=compressor, target=task.target,
                 settings=settings if system == "A1" else settings_for(system, settings))
-    score = None
+    score, stage = None, {}
     status: str
     if system == "A1":
         manifest = RunManifest(analysis_id=str(row["id"]), mode=Mode.frozen, config_hash="")
@@ -130,6 +130,10 @@ def verify(row: dict, llm_factory: Callable, searchable: dict[str, list[dict]],
         findings = store.find("findings", Finding, analysis_id="run")
         states = store.find("states", InvestigationState, analysis_id="run")
         status = findings[0].evidence_status if findings else "no_claim_extracted"
+        updates = store.find("updates", claim_id=findings[0].claim_id) if findings else []
+        stage = {"proposed": updates[-1].get("proposed_status") if updates else None,
+                 "before_review": findings[0].status_before_review if findings else None,
+                 "review": findings[0].review_decision if findings else None}
         failed = (store.get("analyses", "run") or {}).get("status") == "failed" or (
             not findings and manifest.errors) or any(
             s.stop_reason == "provider_error" for s in states)
@@ -140,7 +144,8 @@ def verify(row: dict, llm_factory: Callable, searchable: dict[str, list[dict]],
     target = task.target(Claim(id="", document_id="", span_id="", text="", start=0, end=0,
                                assertion_type=AssertionType.reported_achievement), None)
     return {"id": row["id"], "system": system, "updater": deps.settings.assessment.updater,
-            "status": status, "score": score, "target": target.id, **_usage(manifest)}
+            "status": status, "score": score, "target": target.id,
+            **({"stage": stage} if system != "A1" else {}), **_usage(manifest)}
 
 
 def _cost(predictions: list[dict], prices: dict[str, list[float]] | None) -> float | str:
@@ -180,6 +185,25 @@ def score(predictions: list[dict], gold: list[dict], task: VerificationTask | No
     result["status_agreement"] = (sum(p["status"] == e for p, e in zip(ran, expected)) / len(ran)
                                   if ran else None)
     result["confusion"] = dict(Counter(f"{e} -> {p['status']}" for p, e in zip(ran, expected)))
+    # A system that never commits scores zero on a dataset with no abstention class, and a system
+    # that always commits is scored on every example. Reporting only exact agreement hides which
+    # of the two is happening, so coverage and accuracy-when-committed are reported beside it.
+    committed = [(p, e) for p, e in zip(ran, expected) if p["status"] != "insufficient"]
+    right = [1 for p, e in committed if p["status"] == e]
+    abstained = [(p, e) for p, e in zip(ran, expected) if p["status"] == "insufficient"]
+    result["committed"] = len(committed)
+    result["coverage"] = len(committed) / len(ran) if ran else None
+    result["accuracy_when_committed"] = len(right) / len(committed) if committed else None
+    result["abstained"] = len(abstained)
+    # How often abstaining was the right call, where the dataset has a class for it.
+    result["abstention_precision"] = (sum(e == "insufficient" for _, e in abstained) / len(abstained)
+                                      if abstained else None)
+    if ran:
+        counts = Counter(expected)
+        best, seen = counts.most_common(1)[0]
+        # What a system that ignores the evidence would score, as a floor to beat.
+        result["majority_class"] = best
+        result["majority_class_accuracy"] = seen / len(ran)
     # Scores for different targets are not comparable, so they are not pooled.
     scored = [(p["score"], int(labels[str(p["id"])] == task.positive)) for p in ran
               if p["score"] is not None and len(targets) == 1]
