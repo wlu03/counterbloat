@@ -290,6 +290,46 @@ mixed 5 and supported 4. QuanTemp's claims were selected because a fact-checker 
 worth checking, and a verifier that reads each claim on its own evidence does not carry that
 prior. Nothing here measures that as a success.
 
+### Final measured set (2026-09-20)
+
+Both datasets at seed 5, one prompt version (`prompts-v13`), both arms told the same decision
+protocol, every prediction carrying what the updater had in hand.
+
+| | agreement | coverage | right when committed | floor |
+|---|---|---|---|---|
+| CLIMATE-FEVER, baseline | 46.7% | 92% | 46% | 36.7% |
+| CLIMATE-FEVER, pipeline | 35.0% | 27% | 50% | 36.7% |
+| QuanTemp, baseline | 25.0% | 68% | 37% | 60.0% |
+| QuanTemp, pipeline | 12.5% | 25% | 50% | 60.0% |
+
+The pipeline is below the one-search baseline on both, and below the floor on CLIMATE-FEVER. It is
+more precise than the baseline whenever it commits, on both datasets, and commits about a third as
+often.
+
+Stage by stage on CLIMATE-FEVER, which is where it comes closest:
+
+| stage | correct | share |
+|---|---|---|
+| the updater's proposed status | 32 / 60 | 53.3% |
+| after the verdict gate | 22 / 60 | 36.7% |
+| after the review | 21 / 60 | 35.0% |
+
+The updater beats the baseline and the gate gives it back. This held on the previous run too, at
+`prompts-v12`: 31/60 proposed, 25 after the gate, 23 after the review. Two runs is not a trend,
+and the 38.3% of that run against the 35.0% of this one is a difference of two claims, so the
+prompt versions are two samples rather than an improvement or a regression.
+
+Why the gate costs so much is measured, not inferred. A calculation ran on 2 of 60 CLIMATE-FEVER
+claims and on 0 of 39 QuanTemp claims, so the gate's arithmetic route to a verdict almost never
+exists. Of the claims with no comparable evidence at all, 25 of 28 on CLIMATE-FEVER and 17 of 21
+on QuanTemp had evidence admitted and every item judged to measure something other than the
+claim. The comparability rule, not retrieval, is what empties the gate.
+
+Three prompt revisions were made against the 15-case comparison set in one night and ended where
+they started, 14 of 15, moving the failure between cases. Nothing here should be read as evidence
+that prompt wording fixed anything; the one change that measurably did was stating the
+calculator's argument order, which took key numbers computed from 0.89 to 1.00.
+
 ### Which stage loses the accuracy (2026-09-20)
 
 60 CLIMATE-FEVER claims at seed 5, with the decision protocol, at `prompts-v12`. Each stage
