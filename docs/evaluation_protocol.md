@@ -279,8 +279,11 @@ dataset says little; on CLIMATE-FEVER the baseline beats the floor and the pipel
 
 Where the abstentions come from, now that each stage records what it proposed: of the 53
 abstentions in the CLIMATE-FEVER run, the updater itself proposed `insufficient` 49 times. The
-verdict gate demoted a verdict 4 times. Tuning the gate or the comparability rule therefore
-cannot move most of this; the updater's own judgment is what abstains.
+verdict gate demoted a verdict twice (climate_fever-9 and climate_fever-1562, both proposed
+`contradicted`), and the reviewer demoted one twice more (climate_fever-1655, narrowed from
+`contradicted`; climate_fever-889, a rejection of `mixed`). Counted from the `stage` records in
+`results/cf_A2_v3.jsonl`. Tuning the gate or the comparability rule therefore cannot move most
+of this; the updater's own judgment is what abstains.
 
 Two changes measured against this: normalising a supplied claim the way its document was parsed
 recovered the claims that were silently dropped (3 of 60 to 1 of 60, and offline 121 of 1535
@@ -291,6 +294,19 @@ On FinQA, where the calculator is available and both arms answer every question,
 seed 3: the program arm reaches 80% with every cited figure verifiably in the passage it cites
 (128 of 128), against 82% for a single prompt at 99% (132 of 133). The structure buys grounding
 and a re-executable program, not a better answer.
+
+The same run after the audit fixes to the calculator (bounds judged as bounds, a bracketed
+amount in a table read as a negative, period and scope carried through a result, and two
+programs told apart by their wiring): 80% and 131 of 131, with one program rejected. The
+stricter reading of a source number costs nothing here and closes the path by which a program
+could cite a figure with the wrong sign. `results/finqa_program5.score.json`.
+
+What "grounding" measures is how often the model cites correctly, not how often the pipeline
+uses an ungrounded figure: a program with any input that is not in the passage it cites is
+rejected and produces no answer, so a figure that reaches an answer is grounded by
+construction. An intermediate run with the sign rule half-applied shows the difference —
+131 of 134 cited, two programs rejected, and the two ungrounded figures never reached an
+answer (`results/finqa_program4.score.json`).
 
 ## Report
 

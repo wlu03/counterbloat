@@ -159,8 +159,8 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
   `docs/evaluation_protocol.md` has one case that is wrong for this reason.
 - No path in the code raises an assessment. The updater proposes a status and every later stage
   (the comparability rule, the verdict gate, the reviewer) can only weaken it. On the measured
-  runs this is mostly not what abstains: the updater proposed `insufficient` in 49 of 53
-  abstentions, and the gate accounted for 4.
+  runs this is mostly not what abstains: of 53 abstentions the updater proposed `insufficient`
+  in 49, the verdict gate demoted a verdict in 2, and the reviewer in 2.
 - Measured against a one-search one-judgment baseline on QuanTemp and CLIMATE-FEVER, the pipeline
   commits to fewer claims and is less often right when it commits. See
   `docs/evaluation_protocol.md`. What it does give is grounding: on FinQA every figure it used
