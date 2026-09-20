@@ -211,3 +211,25 @@ def test_an_abstention_is_separated_by_whether_evidence_was_in_hand():
     # updater's judgment rather than a retrieval failure.
     assert result["abstained_holding_evidence"] == 2
     assert result["abstained_empty_handed"] == 1
+
+
+def test_the_baseline_is_told_the_same_decision_protocol_as_the_pipeline():
+    """Otherwise the comparison measures the protocol and not the structure."""
+    from backend.db import Store
+    from backend.models import AssertionType, Claim
+    from backend.retrieval.memory import MemoryIndex
+    from evaluation.ablations.baselines import retrieve_then_judge
+
+    seen = []
+
+    class Reading(FakeLLM):
+        def update_state(self, state, new_evidence_ids, new_calculation_ids):
+            seen.append(state.task)
+            return super().update_state(state, new_evidence_ids, new_calculation_ids)
+
+    claim = Claim(id="c", document_id="d", span_id="s", text="Emissions fell 40%.", start=0,
+                  end=19, assertion_type=AssertionType.reported_achievement)
+    retrieve_then_judge(Reading(), MemoryIndex(), Store("sqlite://"), claim, task="RULE")
+    assert seen == ["RULE"]
+    # Every dataset states one, so neither arm is left to a standard of its own.
+    assert all(t.rubric.strip() for t in VERIFICATION.values())

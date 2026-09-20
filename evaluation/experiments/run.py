@@ -116,7 +116,8 @@ def verify(row: dict, llm_factory: Callable, searchable: dict[str, list[dict]],
         claim = Claim(id=str(row["id"]), document_id=document.id, span_id="", text=text,
                       start=0, end=len(text), assertion_type=AssertionType.reported_achievement)
         try:
-            status = retrieve_then_judge(llm_factory(manifest), index, store, claim).status
+            status = retrieve_then_judge(llm_factory(manifest), index, store, claim,
+                                         task=task.rubric).status
         except ProviderError as exc:
             manifest.errors.append(str(exc))
             status = "not_run"

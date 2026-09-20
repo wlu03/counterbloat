@@ -60,5 +60,11 @@ VERIFICATION = {
     "quantemp": VerificationTask(
         text_field="claim", label_field="label", positive="False", protocol="QuanTemp",
         hypothesis="H=1: the fact-checker's verdict on this claim, as QuanTemp records it, is False.",
+        rubric="Decide the numerical claim as a fact-checker would, using the retrieved sources."
+               " Use supported when the figure is right as stated, contradicted when it is wrong"
+               " or materially misstated, and mixed when the sources point both ways. There is"
+               " no verdict for too little evidence: reach one of the three whenever the sources"
+               " bear on the claim, and treat a close but imprecise figure as supported only if"
+               " the difference does not change what the claim asserts.",
         status_of={"True": "supported", "False": "contradicted", "Conflicting": "mixed"}),
 }
