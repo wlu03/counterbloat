@@ -21,7 +21,7 @@ def _claim(text, kind=AssertionType.reported_achievement, **fields):
 
 def _row(claim, monkeypatch, stance=xbrl.NOT_FOUND, filed=None, sections=SECTIONS):
     monkeypatch.setattr(overstatement.xbrl, "verify",
-                        lambda c, cik: xbrl.Check(c.id, stance, tag="Revenues", filed=filed,
+                        lambda c, cik, period=None: xbrl.Check(c.id, stance, tag="Revenues", filed=filed,
                                                   accession="0001-15-1", note="stub"))
     monkeypatch.setattr(overstatement, "hedging_delta", lambda a, b: 0.0)
     return overstatement.row_for(claim, speaker="Person1", segment="prepared", cik="0000012345",
@@ -67,7 +67,7 @@ def test_rows_serialise_for_the_table(monkeypatch):
 
 def test_a_wording_difference_alone_is_not_a_contradiction(monkeypatch):
     monkeypatch.setattr(overstatement.xbrl, "verify",
-                        lambda c, cik: xbrl.Check(c.id, xbrl.NOT_FOUND, note="stub"))
+                        lambda c, cik, period=None: xbrl.Check(c.id, xbrl.NOT_FOUND, note="stub"))
     monkeypatch.setattr(overstatement, "hedging_delta", lambda a, b: 4.0)
     row = overstatement.row_for(_claim("Demand for our product is strong."), speaker="Person1",
                                 segment="prepared", cik="0000012345", sections=SECTIONS,
