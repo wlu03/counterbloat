@@ -281,7 +281,7 @@ def test_two_programs_over_the_same_numbers_are_the_same_only_if_wired_the_same(
                                                         program("a", "b", "x")]),
                              state, {"s": span}, manifest)
     assert [c.claim_relation for c in readings] == ["agrees", "disagrees"]
-    assert sum("repeats one already recorded" in r for r in manifest.rejections) == 1
+    assert sum("repeating one already recorded" in r for r in manifest.rejections) == 1
 
 
 def _draft(name, value):

@@ -185,7 +185,11 @@ def _calculations(analysis: EvidenceAnalysis, state: InvestigationState,
             here = key(inputs, program.steps, program.claim_output,
                        stated(program.claim_expected))
             if here in done:
-                manifest.rejections.append(f"calculation {calc_id} repeats one already recorded")
+                # No id is used: ids are given to calculations that were recorded, and the next
+                # program that runs takes the one this discarded program would have had.
+                manifest.rejections.append(
+                    "a calculation repeating one already recorded was discarded, over "
+                    + ", ".join(sorted({i.source_span_id for i in inputs})))
                 continue
             spans = [i.source_span_id for i in inputs]
             result = execute(calc_id, state.claim.id, inputs, program.steps, program.note,
