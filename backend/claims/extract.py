@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
 
 from backend.models import Claim, ProviderCall, RunManifest, SourceSpan
 from backend.providers.base import LLM, ClaimDraft, ProviderError, Router
@@ -58,40 +60,76 @@ def structure(text: str, spans: list[SourceSpan], llm: LLM, manifest: RunManifes
     return [_build(draft, span, f"{id_prefix}{span.id}-c0")]
 
 
+@dataclass
+class _Result:
+    """What reading one passage produced, kept apart so workers share no state."""
+    claims: list[Claim] = field(default_factory=list)
+    calls: list[ProviderCall] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    rejections: list[str] = field(default_factory=list)
+    skipped: int = 0
+
+
+def _read_span(span: SourceSpan, by_id: dict[str, SourceSpan], llm: LLM, router: Router | None,
+               selected: set[str], id_prefix: str) -> _Result:
+    out = _Result()
+    if router is not None and span.id not in selected:
+        started = time.monotonic()
+        call = ProviderCall(provider="jev", purpose="route", billing_unit="requests")
+        out.calls.append(call)
+        try:
+            route = router.route(span.text)
+            call.latency_ms = int((time.monotonic() - started) * 1000)
+            if not route.is_claim and route.confidence >= EXCLUDE_CONFIDENCE:
+                out.skipped += 1
+                return out
+        except ProviderError as exc:
+            call.error = str(exc)
+            out.errors.append(str(exc))  # routing failed, so extract from the passage
+    context = [by_id[i] for i in (span.prev_id, span.next_id, *span.note_ids) if i in by_id]
+    try:
+        drafts = llm.extract_claims(span, context)
+    except ProviderError as exc:
+        out.errors.append(str(exc))
+        return out
+    seen: set[str] = set()
+    for draft in drafts:
+        if not valid(draft, span):
+            out.rejections.append(f"claim quote not found in passage {span.id}")
+            continue
+        if draft.quote in seen:
+            continue  # The same wording returned twice is one claim, not two.
+        seen.add(draft.quote)
+        # Numbered within its own passage, so the id does not depend on the order in which
+        # passages happened to finish.
+        out.claims.append(_build(draft, span, f"{id_prefix}{span.id}-c{len(out.claims)}"))
+    return out
+
+
 def extract(spans: list[SourceSpan], llm: LLM, router: Router | None, manifest: RunManifest,
-            selected_span_ids: set[str] | None = None, id_prefix: str = "") -> list[Claim]:
+            selected_span_ids: set[str] | None = None, id_prefix: str = "",
+            workers: int = 1) -> list[Claim]:
+    """Read every candidate passage and return the claims found, in passage order.
+
+    Each passage is read on its own, so `workers` above one reads several at a time. The waiting
+    is on the provider, not on this process. Results are merged in passage order, so the claims,
+    their identifiers and the run manifest come out the same whatever the worker count.
+    """
     selected = selected_span_ids or set()
     by_id = {s.id: s for s in spans}
+    candidates = [s for s in spans if s.kind in CANDIDATE_KINDS]
+    if workers > 1 and len(candidates) > 1:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            results = list(pool.map(
+                lambda span: _read_span(span, by_id, llm, router, selected, id_prefix),
+                candidates))
+    else:
+        results = [_read_span(s, by_id, llm, router, selected, id_prefix) for s in candidates]
     claims: list[Claim] = []
-    for span in spans:
-        if span.kind not in CANDIDATE_KINDS:
-            continue
-        if router is not None and span.id not in selected:
-            started = time.monotonic()
-            call = ProviderCall(provider="jev", purpose="route", billing_unit="requests")
-            manifest.calls.append(call)
-            try:
-                route = router.route(span.text)
-                call.latency_ms = int((time.monotonic() - started) * 1000)
-                if not route.is_claim and route.confidence >= EXCLUDE_CONFIDENCE:
-                    manifest.skipped_by_router += 1
-                    continue
-            except ProviderError as exc:
-                call.error = str(exc)
-                manifest.errors.append(str(exc))  # routing failed, so extract from the passage
-        context = [by_id[i] for i in (span.prev_id, span.next_id, *span.note_ids) if i in by_id]
-        try:
-            drafts = llm.extract_claims(span, context)
-        except ProviderError as exc:
-            manifest.errors.append(str(exc))
-            continue
-        seen: set[str] = set()
-        for draft in drafts:
-            if not valid(draft, span):
-                manifest.rejections.append(f"claim quote not found in passage {span.id}")
-                continue
-            if draft.quote in seen:
-                continue  # The same wording returned twice is one claim, not two.
-            seen.add(draft.quote)
-            claims.append(_build(draft, span, f"{id_prefix}{span.id}-c{len(claims)}"))
+    for result in results:
+        claims += result.claims
+        manifest.calls += result.calls
+        manifest.errors += result.errors
+        manifest.rejections += result.rejections
+        manifest.skipped_by_router += result.skipped
     return claims
