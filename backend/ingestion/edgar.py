@@ -17,6 +17,7 @@ from backend.ingestion.fetch import FetchError, fetch
 TICKERS = "https://www.sec.gov/files/company_tickers.json"
 SUBMISSIONS = "https://data.sec.gov/submissions/CIK{cik}.json"
 COMPANY_FACTS = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
+OLDER = "https://data.sec.gov/submissions/{name}"
 ARCHIVE = "https://www.sec.gov/Archives/edgar/data/{number}/{folder}/{document}"
 MIN_SECONDS_BETWEEN_REQUESTS = 0.1
 
@@ -71,25 +72,37 @@ def cik_for(ticker: str) -> str:
     raise ValueError(f"no CIK for ticker {ticker!r}")
 
 
-def filings(cik: str, form: str | None = None, limit: int = 10) -> list[Filing]:
-    """Recent filings, newest first, optionally only one form such as 10-K or 8-K."""
-    cik = pad(cik)
-    recent = read_json(SUBMISSIONS.format(cik=cik))["filings"]["recent"]
+def _rows(cik: str, block: dict, form: str | None) -> list[Filing]:
     found = []
-    for i, value in enumerate(recent["form"]):
+    for i, value in enumerate(block["form"]):
         if form is not None and value != form:
             continue
-        accession = recent["accessionNumber"][i]
-        document = recent["primaryDocument"][i]
+        accession = block["accessionNumber"][i]
+        document = block["primaryDocument"][i]
         found.append(Filing(
             cik=cik, form=value, accession=accession,
-            filed_at=recent["filingDate"][i], period=recent["reportDate"][i] or None,
+            filed_at=block["filingDate"][i], period=block["reportDate"][i] or None,
             primary_document=document,
             url=ARCHIVE.format(number=int(cik), folder=accession.replace("-", ""),
                                document=document)))
+    return found
+
+
+def filings(cik: str, form: str | None = None, limit: int = 10) -> list[Filing]:
+    """Filings newest first, optionally one form such as 10-K or 8-K.
+
+    A company with a long history has about a thousand filings inline and the rest in further
+    files that the submissions response names. Those are read only when the inline block has not
+    already produced enough, because each one is another request.
+    """
+    cik = pad(cik)
+    submissions = read_json(SUBMISSIONS.format(cik=cik))["filings"]
+    found = _rows(cik, submissions["recent"], form)
+    for older in submissions.get("files", []):
         if len(found) >= limit:
             break
-    return found
+        found.extend(_rows(cik, read_json(OLDER.format(name=older["name"])), form))
+    return found[:limit]
 
 
 def facts(cik: str, tag: str, taxonomy: str = "us-gaap", unit: str = "USD") -> list[dict]:

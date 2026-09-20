@@ -5,7 +5,9 @@ import pytest
 from backend.ingestion import edgar
 from backend.ingestion.fetch import FetchError
 
-SUBMISSIONS = {"filings": {"recent": {
+OLDER_NAME = "CIK0000320193-submissions-001.json"
+
+SUBMISSIONS = {"filings": {"files": [{"name": OLDER_NAME}], "recent": {
     "form": ["10-K", "8-K", "10-Q"],
     "accessionNumber": ["0000320193-24-000123", "0000320193-24-000110", "0000320193-24-000081"],
     "filingDate": ["2024-11-01", "2024-10-31", "2024-08-02"],
@@ -55,3 +57,26 @@ def test_facts_come_back_newest_first_and_an_unknown_tag_is_empty(monkeypatch):
     values = edgar.facts("320193", "Revenues")
     assert [v["end"] for v in values] == ["2024-09-28", "2023-09-30"]
     assert edgar.facts("320193", "NotATag") == []
+
+
+OLDER = {"form": ["10-K"], "accessionNumber": ["0000320193-15-000000"],
+         "filingDate": ["2015-10-28"], "reportDate": ["2015-09-26"],
+         "primaryDocument": ["aapl-20150926.htm"]}
+
+
+def test_filings_read_the_older_file_only_when_more_are_wanted(monkeypatch):
+    seen = []
+
+    def answer(url):
+        seen.append(url)
+        return OLDER if url.endswith(OLDER_NAME) else SUBMISSIONS
+
+    monkeypatch.setattr(edgar, "read_json", answer)
+    # One 10-K is inline, so asking for one must not spend a request on the older file.
+    assert len(edgar.filings("320193", form="10-K", limit=1)) == 1
+    assert not any(u.endswith(OLDER_NAME) for u in seen)
+
+    seen.clear()
+    found = edgar.filings("320193", form="10-K", limit=5)
+    assert [f.filed_at for f in found] == ["2024-11-01", "2015-10-28"]
+    assert any(u.endswith(OLDER_NAME) for u in seen)
