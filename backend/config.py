@@ -16,10 +16,11 @@ class Retrieval(BaseModel):
     candidates_per_query: int = 30
     retained_passages_per_question: int = 8
     preserve_critical_context: bool = True
-    # When the whole admissible corpus is no larger than this many passages, every passage is
-    # shown and nothing is selected. Choosing 8 passages out of 30 that would all have fitted
-    # discards evidence for no reason.
-    show_whole_corpus_under: int = 40
+    # When set, a corpus no larger than this many passages is shown whole instead of being
+    # searched. Off by default: on CLIMATE-FEVER it lowered the share of claims the pipeline
+    # would commit to from 23% to 12%, because more passages gave the updater more reason to
+    # abstain. See docs/evaluation_protocol.md.
+    show_whole_corpus_under: int = 0
 
 
 class Optimization(BaseModel):
