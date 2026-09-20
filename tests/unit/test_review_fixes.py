@@ -223,3 +223,33 @@ def test_a_summary_written_for_a_verdict_the_gate_rejects_is_not_kept():
     assert state.assessment.summary == GATED_SUMMARY
     # The model's own wording is still on the record, in the update it belongs to.
     assert proves.summary not in state.assessment.summary
+
+
+def test_a_rewrite_may_not_restate_a_figure_that_only_the_claim_makes():
+    """The report is written after the review, so the number rule is what checks its prose."""
+    class Affirming:
+        def review(self, state, decisive):
+            return ReviewResult(decision="accept", narrowed_status=None, reasons=[])
+
+        def report(self, state, decisive):
+            return Report(summary="The filing reports 10% growth against the claimed 90%.",
+                          supported_rewrite="The evidence proves a 90% increase.",
+                          source_independence="", measurement_limitations=[],
+                          interpretation_ambiguity="")
+
+    claim = Claim(id="c", document_id="d", span_id="s0", text="Revenue grew 90%.", start=0, end=17,
+                  assertion_type=AssertionType.reported_achievement)
+    state = InvestigationState(claim=claim)
+    span = SourceSpan(id="s1", document_id="d", kind="paragraph", text="Revenue grew 10%.",
+                      start=0, end=17)
+    reconcile(state, [_item(1, "s1", "Revenue grew 10%.", Relationship.contradicts)], {})
+    state.assessment.status = EvidenceStatus.contradicted
+    spans = {"s1": span}
+    finding = finalize(state, spans, Affirming(), run_review(state, spans, Affirming()))
+    assert finding.evidence_status == EvidenceStatus.contradicted
+    # 90 appears only in the claim under test, so nothing establishes it.
+    assert finding.supported_rewrite is None
+    # A summary may still quote the claim's figure, because it is discussing the claim.
+    assert "90" in finding.summary
+    # A rewrite built from what the evidence says is kept.
+    assert numbers_supported("Revenue grew 10%.", state, spans, quoting_claim=False)

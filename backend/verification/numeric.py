@@ -45,8 +45,10 @@ def parse_number(text: str) -> Decimal:
 
 # A number as a document writes it, including the bracketed form a table uses for a negative.
 # A hyphen after a word character is a range dash, so "5-10" holds 5 and 10, not -10.
+# A space may follow a currency symbol but never the sign, so the range "39 - 40" holds 39 and
+# 40 and not -40.
 _IN_SOURCE = re.compile(r"\(\s*(?:US|C|A|HK)?[$€£¥]?\s*\d[\d,]*\.?\d*\s*%?\s*\)"
-                        r"|(?<!\w)-?(?:US|C|A|HK)?[$€£¥]?\s?\d[\d,]*\.?\d*")
+                        r"|(?<!\w)-?(?:(?:US|C|A|HK)?[$€£¥]\s*)?\d[\d,]*\.?\d*")
 
 
 def value_in_source(value: Decimal, span: SourceSpan) -> bool:

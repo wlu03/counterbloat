@@ -37,9 +37,15 @@ def _numbers(text: str) -> set[Decimal]:
     return {Decimal(n.replace(",", "")) for n in re.findall(r"\d[\d,]*\.?\d*", text)}
 
 
-def numbers_supported(text: str, state: InvestigationState, spans: dict[str, SourceSpan]) -> bool:
-    """Model-written text may use only numbers found in the claim, the evidence, or the calculations."""
-    allowed = _numbers(state.claim.text)
+def numbers_supported(text: str, state: InvestigationState, spans: dict[str, SourceSpan],
+                      quoting_claim: bool = True) -> bool:
+    """Model-written text may use only numbers found in the claim, the evidence, or the calculations.
+
+    A summary discusses the claim, so it may repeat the claim's own figures. A supported rewrite
+    states what the evidence does establish, so `quoting_claim` is false there: a figure that
+    appears only in the claim under test is not established by anything.
+    """
+    allowed = _numbers(state.claim.text) if quoting_claim else set()
     for item in state.evidence:
         allowed |= _numbers(spans[item.span_id].text) if item.span_id in spans else set()
     outputs = [abs(v) for c in state.calculations for v in c.outputs.values()]
@@ -130,7 +136,10 @@ def finalize(state: InvestigationState, spans: dict[str, SourceSpan], llm: LLM,
             reasons if review.decision != "accept" else [])
         return finding
     finding.summary = checked(report.summary)
-    if report.supported_rewrite and numbers_supported(report.supported_rewrite, state, spans):
+    # The rewrite asserts what the evidence supports, so it may not repeat a figure that only the
+    # claim states. Without this a contradicted claim can be rewritten back into its own number.
+    if report.supported_rewrite and numbers_supported(report.supported_rewrite, state, spans,
+                                                      quoting_claim=False):
         finding.supported_rewrite = report.supported_rewrite
     finding.uncertainty.source_independence = report.source_independence
     finding.uncertainty.measurement_limitations = report.measurement_limitations + (

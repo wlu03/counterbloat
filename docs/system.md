@@ -68,9 +68,12 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
   history. A calculation is removed when a group it read from is no longer active, or when it
   cites the withdrawn passage and no admitted item cites that passage any more.
 - The claim's own sentence is not accepted as evidence for the claim.
-- The finding summary and the supported rewrite may use only numbers found in the claim, the
-  evidence passages, or the calculation outputs. Otherwise the summary is replaced by a fixed
-  sentence and the rewrite is dropped.
+- The finding summary may use only numbers found in the claim, the evidence passages, or the
+  calculation outputs, and is replaced by a fixed sentence otherwise. The supported rewrite says
+  what the evidence establishes, so a figure that appears only in the claim under test does not
+  support it and the rewrite is dropped. This is what stops a contradicted claim from being
+  rewritten back into its own number. The report is written after the review, so the number rule
+  is the only check on its wording; nothing checks that the wording follows from the evidence.
 - Model output that fails validation is listed under `rejections` in the run manifest. It does
   not make a job partial. Operational failures are listed under `errors` and do.
 - A failed OpenAI, Jev, or Token Company call during an analysis is recorded in the run manifest

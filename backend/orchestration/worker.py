@@ -67,6 +67,9 @@ def _cancelled(store: Store, analysis_id: str) -> bool:
 # does measure something else. A claim about a total names no denominator, and a per-unit figure
 # is therefore not comparable with it.
 WHOLE_WHEN_UNSTATED = ("denominator", "population", "boundary")
+# Passage kinds that carry the qualification a figure depends on: what a total excludes, which
+# sites it covers, which period a column is. They are never put in compressible background.
+QUALIFYING_KINDS = ("footnote", "table_row", "caption")
 
 
 def _differences(differs_on: list[str], claim: Claim, span_id: str,
@@ -126,11 +129,13 @@ def _items(analysis: EvidenceAnalysis, state: InvestigationState, shown: dict[st
 def _calculations(analysis: EvidenceAnalysis, state: InvestigationState,
                   shown: dict[str, SourceSpan], manifest: RunManifest) -> list[Calculation]:
     results = []
-    def key(inputs, steps, claim_output):
+    def key(inputs, steps, claim_output, claim_expected):
         # Two programs are the same calculation when they read the same numbers from the same
-        # passages and combine them in the same order with the same operations, and when they
-        # offer the same result to the claim. Names chosen by the model are ignored; the order of
-        # a step's arguments is not, because dividing a by b is not dividing b by a.
+        # passages, combine them in the same order with the same operations, and put the same
+        # result against the same stated value. Names chosen by the model are ignored; the order
+        # of a step's arguments is not, because dividing a by b is not dividing b by a. A program
+        # that tests the same arithmetic against a different stated value is a second reading of
+        # the claim, not a repeat.
         identity = {i.name: f"{i.source_span_id}={i.value}" for i in inputs}
         position, wiring = {}, []
         for n, step in enumerate(steps):
@@ -138,9 +143,15 @@ def _calculations(analysis: EvidenceAnalysis, state: InvestigationState,
                                           for a in step.args)))
             position[step.out] = f"#{n}"
         return (sorted(identity.values()), tuple(wiring),
-                position.get(claim_output, claim_output))
+                position.get(claim_output, claim_output), claim_expected)
 
-    done = [key(c.inputs, c.steps, c.claim_output) for c in state.calculations]
+    def stated(written):
+        try:
+            return parse_number(written) if written else None
+        except CalculationError:
+            return None
+
+    done = [key(c.inputs, c.steps, c.claim_output, c.claim_expected) for c in state.calculations]
     for program in analysis.programs:
         calc_id = f"{state.claim.id}-n{len(state.calculations) + len(results)}"
         try:
@@ -150,7 +161,8 @@ def _calculations(analysis: EvidenceAnalysis, state: InvestigationState,
                 span = shown.get(value.source_span_id)
                 if span is None or not value_in_source(value.value, span):
                     raise CalculationError(f"input {value.name} is not in its cited passage")
-            here = key(inputs, program.steps, program.claim_output)
+            here = key(inputs, program.steps, program.claim_output,
+                       stated(program.claim_expected))
             if here in done:
                 manifest.rejections.append(f"calculation {calc_id} repeats one already recorded")
                 continue
@@ -213,8 +225,13 @@ def _rounds(analysis_id: str, state: InvestigationState, seen: dict[str, SourceS
             break
         shown = {s.id: s for s in passages + context}
         seen.update(shown)
-        text, _ = build_context([f"[{s.id}] {s.text}" for s in passages],
-                                [f"[{s.id}] {s.text}" for s in context], compressor, manifest)
+        # A footnote or a table row is where a document states what it excluded, so it is
+        # protected with the passages that were retrieved. Only neighbouring narrative is left
+        # compressible, and build_context checks nothing it puts in the background.
+        notes = [s for s in context if s.kind in QUALIFYING_KINDS]
+        prose = [s for s in context if s.kind not in QUALIFYING_KINDS]
+        text, _ = build_context([f"[{s.id}] {s.text}" for s in passages + notes],
+                                [f"[{s.id}] {s.text}" for s in prose], compressor, manifest)
         try:
             analysis = llm.analyze_evidence(claim, state.questions, text)
         except ProviderError as exc:

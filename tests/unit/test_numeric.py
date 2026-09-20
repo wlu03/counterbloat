@@ -137,6 +137,20 @@ def test_a_table_writes_a_negative_in_brackets_so_only_the_negative_is_in_it():
     assert not value_in_source(Decimal(32), span)
 
 
+def test_a_range_dash_is_not_a_minus_sign_but_a_currency_symbol_may_be_spaced():
+    def span(text):
+        return SourceSpan(id="s", document_id="d", kind="table_row", start=0, end=len(text),
+                          text=text)
+
+    # "39 - 40" is a range of useful lives, so it holds 39 and 40 and not -40.
+    lives = span("buildings | useful life in years: 39 - 40")
+    assert value_in_source(Decimal(39), lives) and value_in_source(Decimal(40), lives)
+    assert not value_in_source(Decimal(-40), lives)
+    # A filing puts a space after the currency symbol, and writes a negative with none.
+    assert value_in_source(Decimal(772), span("commercial mortgages | 2012: $ 772"))
+    assert value_in_source(Decimal(-32), span("provision | amount: -32"))
+
+
 def test_a_bracketed_amount_in_a_table_is_negative_and_in_a_sentence_may_not_be():
     where = dict(id="s", document_id="d", start=0, end=40, text="Capital expenditure: (1,577).")
     table = SourceSpan(kind="table_row", **where)
@@ -257,6 +271,18 @@ def test_two_programs_over_the_same_numbers_are_the_same_only_if_wired_the_same(
     assert [c.outputs["x"] for c in after] == [Decimal(2)]
     assert any("calculation rejected" in r for r in manifest.rejections)
 
+    # The same arithmetic offered against a different stated value is a second reading of the
+    # claim, so it is kept. Offered against the same value again, it is a repeat.
+    manifest = RunManifest(analysis_id="a", mode="live", config_hash="h")
+    other = program("a", "b", "x")
+    other.claim_expected = "3"
+    readings = _calculations(EvidenceAnalysis(judgments=[], answers=[],
+                                              programs=[program("a", "b", "x"), other,
+                                                        program("a", "b", "x")]),
+                             state, {"s": span}, manifest)
+    assert [c.claim_relation for c in readings] == ["agrees", "disagrees"]
+    assert sum("repeats one already recorded" in r for r in manifest.rejections) == 1
+
 
 def _draft(name, value):
     from backend.providers.base import InputDraft
@@ -268,6 +294,7 @@ def _draft(name, value):
 def _state_for_calculations():
     from backend.models import AssertionType, Claim, InvestigationState
 
-    claim = Claim(id="c", document_id="d", span_id="s0", text="Revenue was twice cost.", start=0,
-                  end=22, assertion_type=AssertionType.numerical_comparison)
+    text = "Revenue was 2 times cost, not 3 times."
+    claim = Claim(id="c", document_id="d", span_id="s0", text=text, start=0, end=len(text),
+                  assertion_type=AssertionType.numerical_comparison)
     return InvestigationState(claim=claim)
