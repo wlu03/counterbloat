@@ -259,6 +259,37 @@ prediction into a correct abstention and one correct prediction into a wrong one
 others are claims the pipeline committed to in the wrong direction, which abstaining does not
 fix.
 
+### Telling both arms the decision protocol (2026-09-20)
+
+Each labelled dataset now states the protocol its annotators used: which statuses it has and when
+the evidence is enough to use one. It names no label for any particular claim. The protocol goes
+to the planner, the updater and the reviewer, and to the one-search baseline as well, because a
+comparison in which only one arm is told the task measures the task and not the structure. This
+was a real risk here: the protocol is worth more than anything else measured so far.
+
+Baseline A1, one search and one judgment, 60 CLIMATE-FEVER claims and 40 QuanTemp claims at
+seed 5:
+
+| | agreement | coverage | right when committed | floor |
+|---|---|---|---|---|
+| CLIMATE-FEVER, no protocol | 40.0% | 35% | 57% | 36.7% |
+| CLIMATE-FEVER, with protocol | 46.7% | 92% | 46% | 36.7% |
+| QuanTemp, no protocol | 15.0% | 35% | 43% | 60.0% |
+| QuanTemp, with protocol | 25.0% | 68% | 37% | 60.0% |
+
+The protocol raises agreement on both datasets and roughly doubles coverage. It lowers precision
+per commitment, so the gain comes from making fewer abstentions rather than better judgments.
+Both effects follow from the label distributions: 27% of the CLIMATE-FEVER sample is
+NOT_ENOUGH_INFO, and QuanTemp has no class for too little evidence at all, so every abstention
+there is counted wrong.
+
+On QuanTemp both systems remain far below the floor. 60% of that sample is labelled False, so
+answering False every time scores 60% against the baseline's 25%. The confusion matrix says why:
+of 24 claims labelled False the baseline calls only 9 false, and answers insufficient 6 times,
+mixed 5 and supported 4. QuanTemp's claims were selected because a fact-checker thought them
+worth checking, and a verifier that reads each claim on its own evidence does not carry that
+prior. Nothing here measures that as a success.
+
 ### Two defects found by running one claim through the live pipeline (2026-09-20)
 
 This is one document and one claim, not a dataset result. It is recorded because each defect was
