@@ -11,6 +11,7 @@ from backend.models import (
     Relationship, RunManifest,
 )
 from backend.providers.base import StateUpdate
+from datasets import fetch as dataset_fetch
 from datasets.adapters import climate_fever, finqa, greenclaims, quantemp
 from datasets.adapters.base import export
 from datasets.manifests.manifest import write_manifest
@@ -21,6 +22,14 @@ from evaluation.components.metrics import (
 from evaluation.robustness.evidence_change import (
     order_does_not_matter, repeating_adds_nothing, withdrawal_recomputes,
 )
+
+
+class _Response:
+    """Stands in for urlopen's context manager."""
+    def __init__(self, body): self.body = body
+    def __enter__(self): return self
+    def __exit__(self, *exc): return False
+    def read(self): return self.body
 
 
 def _state():
@@ -157,3 +166,18 @@ def test_climate_fever_maps_a_parquet_style_integer_label(tmp_path):
                                   "evidences": []}) + "\n")
     [example] = climate_fever.load(source)
     assert example.evaluation_only["claim_label"] == "DISPUTED"
+
+
+def test_a_changed_upstream_file_is_refused(tmp_path, monkeypatch):
+    source = {"page": "https://example.invalid", "license": "unverified",
+              "files": {"x.json": ("https://example.invalid/x.json", "0" * 64)}}
+    monkeypatch.setitem(dataset_fetch.SOURCES, "probe", source)
+    monkeypatch.setattr(dataset_fetch.urllib.request, "urlopen",
+                        lambda *a, **k: _Response(b'{"claim": "x"}'))
+    with pytest.raises(ValueError, match="SHA256"):
+        dataset_fetch.fetch("probe", tmp_path)
+
+
+def test_every_fetchable_dataset_has_an_adapter():
+    from datasets.prepare import ADAPTERS
+    assert set(dataset_fetch.SOURCES) <= set(ADAPTERS)

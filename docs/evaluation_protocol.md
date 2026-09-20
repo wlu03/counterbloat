@@ -54,8 +54,15 @@ No test covers this command.
 
     uv run python -m datasets.prepare averitec PATH/TO/LOCAL/FILE.json --revision REVISION --split dev
 
-The file must already be on disk. Nothing is downloaded. Obtain each dataset from its publisher
-under its license. The command writes `prepared/DATASET/SPLIT.visible.jsonl` (runtime inputs),
+The file must already be on disk. `prepare` downloads nothing. Obtain each dataset from its
+publisher under its license. QuanTemp and CLIMATE-FEVER name no license and publish their files
+directly, so one command fetches them into `datasets/DATASET/source`, which git ignores:
+
+    uv run python -m datasets.fetch quantemp
+    uv run python -m datasets.fetch climate_fever
+
+Each file is checked against the SHA256 this repository prepared from, and a file already
+present and matching is left alone. The command writes `prepared/DATASET/SPLIT.visible.jsonl` (runtime inputs),
 `gold/DATASET/SPLIT.jsonl` (labels, owner-readable only), and `prepared/DATASET/SPLIT.manifest.json`
 with the file hash, row count, revision, license, and field names. `prepared/`, `gold/`, and `results/` are ignored by
 git.
