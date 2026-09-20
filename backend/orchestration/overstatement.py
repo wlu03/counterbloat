@@ -40,9 +40,16 @@ class Row:
     note: str = ""
 
 
-def _verdict(axes: Axes) -> str:
+def _verdict(axes: Axes, stances: list[str]) -> str:
+    """A claim is contradicted only when an agent that looked at something disagreed with it.
+
+    A hedging delta still counts towards the gap, because the filing putting the same point more
+    carefully is worth reading, but a difference in wording is not a disagreement about fact.
+    """
     if axes.abstained or axes.evidence_gap is None:
         return ABSTAIN
+    if xbrl.CONTRADICTS not in stances:
+        return CONSISTENT
     return CONTRADICTED if axes.evidence_gap >= DISAGREEMENT else CONSISTENT
 
 
@@ -75,7 +82,7 @@ def row_for(claim: Claim, *, speaker: str | None, segment: str, cik: str,
         specificity_axes=specificity(claim),
         puffery_per_100w=round(puffery_density(claim.text), 2),
         rhetorical_inflation=axes.rhetorical_inflation, evidence_gap=axes.evidence_gap,
-        verdict=_verdict(axes), evidence=evidence, parts=axes.parts,
+        verdict=_verdict(axes, [check.stance]), evidence=evidence, parts=axes.parts,
         note=axes.reason or ("no filing passage was close to the claim" if not matches else ""))
 
 

@@ -52,10 +52,14 @@ def extract(spans: list[SourceSpan], llm: LLM, router: Router | None, manifest: 
         except ProviderError as exc:
             manifest.errors.append(str(exc))
             continue
+        seen: set[str] = set()
         for draft in drafts:
             if not valid(draft, span):
                 manifest.rejections.append(f"claim quote not found in passage {span.id}")
                 continue
+            if draft.quote in seen:
+                continue  # The same wording returned twice is one claim, not two.
+            seen.add(draft.quote)
             start = span.start + span.text.index(draft.quote)
             claims.append(Claim(
                 id=f"{id_prefix}{span.id}-c{len(claims)}", document_id=span.document_id, span_id=span.id,

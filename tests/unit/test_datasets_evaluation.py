@@ -226,3 +226,26 @@ def test_prepare_writes_the_searchable_file_and_counts_it(tmp_path):
                                    "media_type": "text/plain", "url": "https://en.wikipedia.org/wiki/A"}
     assert manifest["field_mapping"]["searchable_documents"] == 1
     assert "REFUTES" not in (tmp_path / "prepared/climate_fever/all.visible.jsonl").read_text()
+
+
+def test_the_same_quote_returned_twice_is_one_claim():
+    from backend.claims.extract import extract
+    from backend.models import AssertionType, Mode, RunManifest, SourceSpan
+    from backend.providers.base import ClaimDraft
+
+    span = SourceSpan(id="s1", document_id="d", kind="paragraph",
+                      text="Net income rose 13% to $10.3 million.", start=0, end=37)
+
+    def draft():
+        return ClaimDraft(quote="Net income rose 13% to $10.3 million.",
+                          assertion_type=AssertionType.numerical_comparison, subject=None,
+                          assertion=None, metric="net income", value="$10.3 million", unit="USD",
+                          denominator=None, population=None, boundary=None, period=None,
+                          qualifications=[])
+
+    class Twice:
+        def extract_claims(self, *a, **k):
+            return [draft(), draft()]
+
+    manifest = RunManifest(analysis_id="a", mode=Mode.live, config_hash="c")
+    assert len(extract([span], Twice(), None, manifest)) == 1

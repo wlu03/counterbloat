@@ -75,13 +75,19 @@ def tag_for(metric: str | None) -> tuple[str, ...]:
 
 
 def stated_value(claim: Claim) -> Decimal | None:
-    """The number the claim states, scaled once by whichever of the value or unit names a scale."""
+    """The number the claim states, scaled once by whichever of the value or unit names a scale.
+
+    A value that names more than one number, such as a percentage change and an amount, does not
+    say on its own which one a filed figure should be compared with, so nothing is returned.
+    """
     raw = (claim.value or "").strip()
-    found = re.search(r"-?\d[\d,]*\.?\d*", raw)
-    if not found:
+    numbers = re.findall(r"-?\d[\d,]*\.?\d*", raw)
+    if not numbers:
+        return None
+    if len({n.replace(",", "") for n in numbers}) > 1:
         return None
     try:
-        value = Decimal(found.group().replace(",", ""))
+        value = Decimal(numbers[0].replace(",", ""))
     except InvalidOperation:
         return None
     for source in (raw.lower(), (claim.unit or "").lower()):

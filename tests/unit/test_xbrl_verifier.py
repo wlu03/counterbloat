@@ -90,3 +90,10 @@ def test_an_annual_figure_cannot_answer_a_quarterly_claim(monkeypatch):
     check = xbrl.verify(_claim(metric="revenue", value="$76.1 million", period="2015-Q1"),
                         "0000012345")
     assert check.stance == xbrl.NOT_FOUND
+
+
+def test_a_value_naming_two_different_numbers_is_not_guessed_at():
+    # "13% increase; $10.3 million" could be checked against either number.
+    assert xbrl.stated_value(_claim(value="13% increase; $10.3 million")) is None
+    # The same number written twice is not ambiguous.
+    assert xbrl.stated_value(_claim(value="$10.3 million, or 10.3")) == Decimal("10300000")

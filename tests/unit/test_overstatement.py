@@ -63,3 +63,15 @@ def test_rows_serialise_for_the_table(monkeypatch):
     rows = [_row(_claim("Demand is strong."), monkeypatch)]
     out = overstatement.as_dicts(rows)
     assert out[0]["claim_id"] == "c1" and isinstance(out[0]["evidence"], list)
+
+
+def test_a_wording_difference_alone_is_not_a_contradiction(monkeypatch):
+    monkeypatch.setattr(overstatement.xbrl, "verify",
+                        lambda c, cik: xbrl.Check(c.id, xbrl.NOT_FOUND, note="stub"))
+    monkeypatch.setattr(overstatement, "hedging_delta", lambda a, b: 4.0)
+    row = overstatement.row_for(_claim("Demand for our product is strong."), speaker="Person1",
+                                segment="prepared", cik="0000012345", sections=SECTIONS,
+                                accession="0001-15-1")
+    # The gap records the difference, but no agent disagreed, so the verdict does not say so.
+    assert row.evidence_gap is not None and row.evidence_gap > 0
+    assert row.verdict == overstatement.CONSISTENT
