@@ -2,11 +2,13 @@
 
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AppShell } from "@/components/app-shell";
 import { EvidenceDrawer } from "@/components/EvidenceDrawer";
 import { FindingPanel } from "@/components/FindingPanel";
 import { InvestigationView } from "@/components/InvestigationView";
 import { Reader } from "@/components/Reader";
 import { ResearchPanel } from "@/components/ResearchPanel";
+import "../../analyze/reader.css";
 import { api, type ClaimDetail, type Finding, type Research, type Span, type Update } from "@/lib/api";
 
 type Job = { id: string; document_id: string; status: string; errors: string[]; partial?: boolean };
@@ -53,6 +55,8 @@ export default function AnalysisPage() {
   const detail = finding ? details[finding.claim_id] : undefined;
 
   return (
+    <AppShell>
+    <div className="cc-reader">
     <main>
       <p role="status">Analysis {job?.status ?? "loading"}{job?.partial ? " (partial)" : ""}.
         {job?.errors?.length ? ` ${job.errors.length} operational errors recorded.` : ""}{" "}
@@ -68,5 +72,7 @@ export default function AnalysisPage() {
         </aside>
       </div>
     </main>
+    </div>
+    </AppShell>
   );
 }

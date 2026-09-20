@@ -2,7 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { AppShell } from "@/components/app-shell";
 import { api } from "@/lib/api";
+import "./reader.css";
 
 export default function Home() {
   const router = useRouter();
@@ -28,6 +30,8 @@ export default function Home() {
   }
 
   return (
+    <AppShell>
+    <div className="cc-reader">
     <main>
       <form className="form" onSubmit={submit}>
         <label htmlFor="url">Document URL</label>
@@ -44,5 +48,7 @@ export default function Home() {
         {error && <p role="alert">{error}</p>}
       </form>
     </main>
+    </div>
+    </AppShell>
   );
 }
