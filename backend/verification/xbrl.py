@@ -154,7 +154,10 @@ def verify(claim: Claim, cik: str, period: str | None = None) -> Check:
     stated = stated_value(claim)
     if stated is None:
         return Check(claim.id, NOT_FOUND, note="claim states no number to check")
-    stated_period = (claim.period or "").strip() or (period or "").strip()
+    # The period of the call is known from the filing calendar, while the period on the claim is
+    # whatever the speaker said, often just a year. The caller's is used when it has one, so a
+    # yearly figure cannot answer a claim about one quarter of that year.
+    stated_period = (period or "").strip() or (claim.period or "").strip()
     span = window(stated_period)
     if span is None:
         return Check(claim.id, NOT_FOUND, note="no period to compare the claim against")

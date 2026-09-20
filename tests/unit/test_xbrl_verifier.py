@@ -114,3 +114,17 @@ def test_a_claim_with_no_period_is_not_compared_with_the_newest_figure(monkeypat
     # Given the period of the call, the right figure is found.
     found = xbrl.verify(claim, "0000012345", period="2015-Q1")
     assert found.stance == xbrl.SUPPORTS and found.accession == "old"
+
+
+def test_the_period_of_the_call_wins_over_a_coarser_one_on_the_claim(monkeypatch):
+    # The company's year ends in early January, so its annual figure ends inside the first
+    # quarter window. Only the duration tells the two apart.
+    _facts(monkeypatch, {"NetIncomeLoss": [
+        {"end": "2015-01-02", "start": "2014-01-04", "val": 38_640_000, "accn": "annual"},
+        {"end": "2015-04-03", "start": "2015-01-03", "val": 10_333_000, "accn": "quarter"}]})
+    claim = _claim(metric="net income", value="$10.3 million", period="2015")
+    # Left to the claim's own period, the year window admits the annual figure.
+    assert xbrl.verify(claim, "0000012345").accession == "annual"
+    # Told the call reported the first quarter, the quarterly figure is the one compared.
+    found = xbrl.verify(claim, "0000012345", period="2015-Q1")
+    assert found.accession == "quarter" and found.stance == xbrl.SUPPORTS
