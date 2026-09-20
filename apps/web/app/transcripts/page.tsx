@@ -26,9 +26,11 @@ export default function TranscriptsPage() {
           </p>
         </header>
         <p role="note" className="mb-4 rounded-lg border border-dashed border-border bg-secondary/40 px-4 py-3 text-sm text-foreground">
-          Sample data. This page is not connected to the backend yet. The companies are invented,
-          and the transcripts, agent runs, scores, and verdicts shown here were written by hand to
-          show the intended workflow. They are not results of any analysis.
+          Real calls and real filings. A run reads the call, chases each claim into the annual
+          report for the same period, and checks any named figure against what the company filed.
+          The score beside a claim is accumulated from that evidence under a neutral prior. It is
+          not fitted to any outcome, so it says how the evidence adds up and not how often such a
+          claim turns out to be wrong.
         </p>
         <TranscriptWorkflow />
       </div>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Search,
   Play,
@@ -23,10 +23,9 @@ import {
   ArrowRight,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { listCalls, startRun, waitForLedger } from "@/lib/calls"
 import { Panel, PanelTitle } from "@/components/panel"
 import {
-  transcripts,
-  generateLedger,
   generateRunTrace,
   SECTOR_LABELS,
   CLAIM_TYPE_LABELS,
@@ -103,11 +102,28 @@ export function TranscriptWorkflow() {
   const [resolved, setResolved] = useState<Record<string, LedgerVerdict>>({})
   const [history, setHistory] = useState<RunSummary[]>([])
   const [runMode, setRunMode] = useState<RunMode>("fresh")
+  const [records, setRecords] = useState<TranscriptRecord[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
   const timers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+  // The calls the backend has every part of: transcript, matching annual report, filed figures.
+  useEffect(() => {
+    let live = true
+    listCalls()
+      .then((calls) => {
+        if (live) setRecords(calls as unknown as TranscriptRecord[])
+      })
+      .catch((error: Error) => {
+        if (live) setLoadError(error.message)
+      })
+    return () => {
+      live = false
+    }
+  }, [])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return transcripts.filter((t) => {
+    return records.filter((t) => {
       if (sector !== "all" && t.sector !== sector) return false
       if (!q) return true
       return (
@@ -117,11 +133,11 @@ export function TranscriptWorkflow() {
         t.summary.toLowerCase().includes(q)
       )
     })
-  }, [query, sector])
+  }, [query, sector, records])
 
   const selected = useMemo(
-    () => transcripts.find((t) => t.id === selectedId) ?? null,
-    [selectedId],
+    () => records.find((t) => t.id === selectedId) ?? null,
+    [selectedId, records],
   )
 
   function resetRun() {
@@ -142,7 +158,7 @@ export function TranscriptWorkflow() {
     setSelectedId(t.id)
   }
 
-  function runWorkflow(record: TranscriptRecord, mode: RunMode) {
+  async function runWorkflow(record: TranscriptRecord, mode: RunMode) {
     timers.current.forEach(clearTimeout)
     timers.current = []
 
@@ -151,7 +167,19 @@ export function TranscriptWorkflow() {
     if (mode === "corrections") setCorrections(corr)
 
     const nextAttempt = attempt + 1
-    const nextLedger = ledger ?? generateLedger(record)
+    // The backend reads the call, chases each claim into the filing, and scores what it finds.
+    let nextLedger = ledger
+    if (!nextLedger || mode === "fresh") {
+      setRunState("running")
+      try {
+        await startRun(record.id)
+        nextLedger = (await waitForLedger(record.id)) as unknown as Ledger
+      } catch (error) {
+        setLoadError((error as Error).message)
+        setRunState("idle")
+        return
+      }
+    }
     const nextTrace = generateRunTrace(record, nextLedger, nextAttempt, corr, mode)
 
     // Snapshot the finished run into history before overwriting.
