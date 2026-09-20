@@ -183,3 +183,26 @@ def test_a_supplied_claim_is_read_rather_than_searched_for(store):
 
     assert structure("the Pacific island of Tuvalu is sinking", [span], Broken(), manifest) == []
     assert "503" in manifest.errors[0]
+
+
+def test_a_supplied_claim_is_normalised_the_way_its_document_was(store):
+    """The parser rewrites an ellipsis character, so the raw claim is no longer a substring of
+    the passage it came from. It should still be found."""
+    from backend.claims.extract import structure
+    from backend.ingestion.snapshot import admit
+    from backend.models import Mode, RunManifest
+    from tests.fakes import FakeLLM
+
+    class Reader(FakeLLM):
+        def structure_claim(self, text, span):
+            return ClaimDraft(quote=text, assertion_type="capability", subject="water vapour",
+                              assertion="is the main greenhouse gas", metric=None, value=None,
+                              unit=None, denominator=None, population=None, boundary=None,
+                              period=None, qualifications=[])
+
+    raw = "The main greenhouse gas is water vapour[…]"
+    _, spans = admit(store, f"<html><body><p>{raw}</p></body></html>".encode(), "text/html")
+    manifest = RunManifest(analysis_id="a", mode=Mode.frozen, config_hash="")
+    [claim] = structure(raw, spans, Reader(), manifest)
+    assert claim.text == "The main greenhouse gas is water vapour[...]"
+    assert claim.text in spans[0].text and manifest.rejections == []

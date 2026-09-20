@@ -6,6 +6,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
+from backend.ingestion.parse import normalize
 from backend.models import Claim, ProviderCall, RunManifest, SourceSpan
 from backend.providers.base import LLM, ClaimDraft, ProviderError, Router
 
@@ -42,17 +43,21 @@ def structure(text: str, spans: list[SourceSpan], llm: LLM, manifest: RunManifes
     written. The extractor's job is to find claims worth checking in a document, and it declines
     a general statement of fact. A claim a person or a dataset handed over has already been chosen.
     """
-    span = next((s for s in spans if text in s.text), None)
+    # The passage was normalised when the document was parsed, so the claim is normalised the
+    # same way before it is looked for. Otherwise a claim that differs only in how a character
+    # is written, such as an ellipsis, is not found in the document it came from.
+    wanted = normalize(text)
+    span = next((s for s in spans if wanted in s.text), None)
     if span is None:
         manifest.rejections.append("the supplied claim is not a verbatim quote of any passage")
         return []
     try:
-        draft = llm.structure_claim(text, span)
+        draft = llm.structure_claim(wanted, span)
     except ProviderError as exc:
         manifest.errors.append(str(exc))
         return []
     # The model may only read the fields of the supplied wording, so its quote is that wording.
-    draft.quote = text
+    draft.quote = wanted
     if not valid(draft, span):
         manifest.rejections.append("the structured fields of the supplied claim state a number "
                                    "that its wording does not")
