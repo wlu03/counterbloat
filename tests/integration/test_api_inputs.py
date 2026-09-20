@@ -96,3 +96,21 @@ def test_internal_scores_are_served_only_by_the_research_view(store, monkeypatch
     assert research["belief"]["calibration_status"] == "uncalibrated"
     assert research["updates"][0]["new_score"] == research["belief"]["raw_probability"]
     assert "not a probability" in research["notice"].lower()
+
+
+def test_traces_give_the_web_application_one_record_per_finding_without_scores(store, monkeypatch):
+    monkeypatch.setenv("COUNTERCHECK_API_KEY", "k")
+    settings = Settings(mode=Mode.frozen, assessment=AssessmentSettings(updater="evidence_accumulator"))
+    client = TestClient(create_app(Deps(store=store, index=MemoryIndex(), settings=settings,
+                                        llm_factory=FakeLLM)))
+    document = client.post("/documents", json={"content": REPORT.decode()}, headers=HEADERS).json()
+    job = client.post("/analyses", json={"document_id": document["id"]}, headers=HEADERS).json()
+    [record] = client.get("/traces", headers=HEADERS).json()
+    assert record["analysis_id"] == job["id"] and record["status"] == "contradicted"
+    assert record["document"]["title"] == "Example Manufacturing sustainability update"
+    assert record["created_at"] and 0 < record["coverage"] <= 1
+    assert len(record["evidence"]) == 3 and record["calculations"] and record["questions"]
+    assert client.get(f"/traces/{record['id']}", headers=HEADERS).json()["id"] == record["id"]
+    assert client.get("/traces/unknown", headers=HEADERS).status_code == 404
+    text = str(record)
+    assert "raw_probability" not in text and "log_evidence" not in text and "'belief'" not in text

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException
@@ -138,7 +139,7 @@ def create_app(deps: Deps | None = None) -> FastAPI:
         job = {"id": f"an-{uuid.uuid4().hex[:12]}", "document_id": request.document_id,
                "mode": request.mode, "cutoff": request.cutoff.isoformat() if request.cutoff else None,
                "selected_span_ids": request.selected_span_ids, "status": "queued",
-               "replicate": request.replicate,
+               "replicate": request.replicate, "created_at": datetime.now(UTC).isoformat(),
                "idempotency_key": idempotency_key, "cancel_requested": False}
         d.store.put("analyses", job["id"], job, document_id=request.document_id,
                     idempotency_key=idempotency_key)
@@ -156,6 +157,57 @@ def create_app(deps: Deps | None = None) -> FastAPI:
     def read_findings(analysis_id: str, d: Deps = Depends(get_deps)):
         found(d.store.get("analyses", analysis_id), "analysis")
         return d.store.find("findings", Finding, analysis_id=analysis_id)
+
+    def trace(d: Deps, job: dict, finding: Finding) -> dict:
+        """Everything the web application shows about one finding, in one record."""
+        claim = d.store.get("claims", finding.claim_id, Claim)
+        states = d.store.find("states", InvestigationState, claim_id=finding.claim_id)
+        state = states[-1] if states else None
+        document = d.store.get("documents", job["document_id"], DocumentSnapshot)
+        spans = d.store.find("spans", SourceSpan, document_id=job["document_id"])
+        heading = next((s.text for s in spans if s.kind == "heading"), None)
+        manifest = d.store.get("manifests", job["id"]) or {}
+        calls = manifest.get("calls", [])
+        sources = {e.document_id: d.store.get("documents", e.document_id, DocumentSnapshot)
+                   for e in (state.evidence if state else [])}
+        return {
+            "id": finding.finding_id, "analysis_id": job["id"], "claim_id": finding.claim_id,
+            "claim": claim.text if claim else "", "status": finding.evidence_status,
+            "mechanisms": finding.mechanisms, "review_status": finding.review_status,
+            "stop_reason": finding.stop_reason, "partial": bool(job.get("partial")),
+            # Jobs made before this field existed have no creation time of their own.
+            "created_at": job.get("created_at") or (document.retrieved_at if document else None),
+            "document": {"id": job["document_id"], "url": document.url if document else None,
+                         "title": heading or (document.url if document else None) or "Pasted text"},
+            "summary": finding.summary, "supported_rewrite": finding.supported_rewrite,
+            "uncertainty": finding.uncertainty,
+            # The share of checklist questions answered, weighted by materiality. Not a confidence.
+            "coverage": coverage(state.questions) if state else 0.0,
+            "questions": state.questions if state else [],
+            "evidence": [{**e.model_dump(mode="json"),
+                          "source_url": sources[e.document_id].url if sources.get(e.document_id) else None}
+                         for e in (state.evidence if state else [])],
+            "calculations": state.calculations if state else [],
+            # Usage is recorded per analysis, so every finding of one document shows the same totals.
+            "usage": {"models": manifest.get("models", {}), "updater": manifest.get("updater"),
+                      "calls": calls,
+                      "tokens": sum(c.get("input_tokens", 0) + c.get("output_tokens", 0) for c in calls),
+                      "latency_ms": sum(c.get("latency_ms") or 0 for c in calls),
+                      "replications": [c for c in calls if c.get("provider") == "devin"],
+                      "errors": manifest.get("errors", [])}}
+
+    @app.get("/traces", dependencies=guard)
+    def list_traces(d: Deps = Depends(get_deps)):
+        jobs = d.store.find("analyses")
+        return [trace(d, job, finding) for job in jobs
+                for finding in d.store.find("findings", Finding, analysis_id=job["id"])]
+
+    @app.get("/traces/{finding_id}", dependencies=guard)
+    def read_trace(finding_id: str, d: Deps = Depends(get_deps)):
+        finding = found(d.store.get("findings", finding_id, Finding), "finding")
+        job = next((j for j in d.store.find("analyses")
+                    if d.store.find("findings", analysis_id=j["id"], claim_id=finding.claim_id)), None)
+        return trace(d, found(job, "analysis"), finding)
 
     @app.get("/claims/{claim_id}", dependencies=guard)
     def read_claim(claim_id: str, d: Deps = Depends(get_deps)):
