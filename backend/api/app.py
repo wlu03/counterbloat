@@ -8,6 +8,7 @@ from typing import Literal
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException
 from pydantic import AwareDatetime, BaseModel
 
+from backend.api import calls
 from backend.belief.priority import coverage
 from backend.config import env, load_settings
 from backend.db import Store
@@ -199,6 +200,16 @@ def create_app(deps: Deps | None = None) -> FastAPI:
                       "latency_ms": sum(c.get("latency_ms") or 0 for c in calls),
                       "replications": [c for c in calls if c.get("provider") == "devin"],
                       "errors": manifest.get("errors", [])}}
+
+    @app.get("/calls", dependencies=guard)
+    def list_calls():
+        """Calls with a transcript, a matching annual report and filed figures."""
+        return {"calls": calls.catalogue()}
+
+    @app.get("/calls/{call_id}/ledger", dependencies=guard)
+    def read_ledger(call_id: str, d: Deps = Depends(get_deps)):
+        run = found(d.store.get("call_runs", call_id), "ledger")
+        return run
 
     @app.get("/traces", dependencies=guard)
     def list_traces(d: Deps = Depends(get_deps)):
