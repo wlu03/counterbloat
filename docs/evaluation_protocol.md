@@ -290,6 +290,35 @@ mixed 5 and supported 4. QuanTemp's claims were selected because a fact-checker 
 worth checking, and a verifier that reads each claim on its own evidence does not carry that
 prior. Nothing here measures that as a success.
 
+### Which stage loses the accuracy (2026-09-20)
+
+60 CLIMATE-FEVER claims at seed 5, with the decision protocol, at `prompts-v12`. Each stage
+records what it proposed, so the accuracy can be read off after each one.
+
+| stage | correct | share |
+|---|---|---|
+| the updater's proposed status | 31 / 60 | 51.7% |
+| after the verdict gate | 25 / 60 | 41.7% |
+| after the review | 23 / 60 | 38.3% |
+| one-search baseline, same protocol | 28 / 60 | 46.7% |
+| floor, always answering the most common label | | 36.7% |
+
+The updater's own proposals beat the baseline. Everything after them gives that back. The verdict
+gate demoted 13 correct verdicts and rescued 7, a net loss of 6; the review lost 2 more and
+rescued none. The final 38.3% is below the baseline and 1.6 points above the floor.
+
+This reverses what this file recorded earlier. When the updater abstained by default the
+abstentions were its own, 49 of 53. Now that it is told when the evidence is enough, it is the
+strongest stage and the evidence gate is the weakest. The gate is the rule that a verdict needs
+comparable evidence in the claim's own direction or a calculation compared with the claim's value.
+On CLIMATE-FEVER calculations almost never fire, so the gate rests on the comparability judgment
+alone, and it is wrong more often than it is right: 13 against 7.
+
+That is the cost of the property the gate buys, which is that no verdict is recorded without
+source-linked evidence behind it. It is a trade, not a defect, and on this dataset it is a losing
+one. Coverage says the same thing: the pipeline commits on 33% of claims against the baseline's
+92%, while being equally accurate when it does commit, 45.0% against 45.5%.
+
 ### Two defects found by running one claim through the live pipeline (2026-09-20)
 
 This is one document and one claim, not a dataset result. It is recorded because each defect was
