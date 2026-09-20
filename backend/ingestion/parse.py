@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import re
+from dataclasses import dataclass, replace
 import unicodedata
 import zlib
 from types import SimpleNamespace
@@ -50,112 +51,189 @@ def _strip_hidden(root) -> None:
             element.drop_tree()
 
 
-def _span(cell) -> int:
-    value = (cell.get("colspan") or "").strip()
+def _span(cell, name: str = "colspan") -> int:
+    value = (cell.get(name) or "").strip()
     return int(value) if re.fullmatch(r"[1-9]\d?", value) else 1  # 1 to 99; anything else is 1
 
 
 _SYMBOL = re.compile(r"(?:US|C|A|HK)?[$€£¥]")  # a currency sign in a cell of its own
 _CLOSER = re.compile(r"[)%]+|pts|bps")           # a sign in its own cell that ends the value before it
+_DASH = re.compile(r"[-–—]|to")                  # joins the two ends of a range
 _VALUE = re.compile(r"\(?-?(?:US|C|A|HK)?[$€£¥]?\s?\d[\d,]*(?:\.\d+)?\s?%?\)?%?")
 _YEAR = re.compile(r"(?:19|20)\d{2}")
+_NOTE = re.compile(r"\(.+\)")  # a note about every row, such as "(in millions)"
 
-Cell = tuple[int, int, str, bool]  # first column, last column, text, whether it is a <th>
+
+@dataclass(frozen=True)
+class Cell:
+    first: int   # first and last column on the table's grid
+    last: int
+    text: str
+    th: bool
+    carried: bool = False  # placed here by a rowspan in a row above
 
 
-def _grid(row) -> list[Cell]:
-    """The cells of one row placed on the table's column grid. A colspan widens a cell."""
-    cells, column = [], 0
-    for cell in row.findall("./*"):
-        width = _span(cell)
-        cells.append((column, column + width - 1, _visible_text(cell), cell.tag == "th"))
-        column += width
-    return cells
+def _grids(rows) -> list[list[Cell]]:
+    """Every row's cells placed on the table's column grid.
+
+    A colspan widens a cell. A rowspan keeps a cell in the rows below it, where the cells of those
+    rows are placed in the columns that are left.
+    """
+    grids, carry = [], []  # carry holds (cell, rows still to cover)
+    for row in rows:
+        taken = [cell for cell, _ in carry]
+        placed, later, column = list(taken), [], 0
+        for element in row.findall("./*"):
+            while any(c.first <= column <= c.last for c in taken):
+                column = next(c.last for c in taken if c.first <= column <= c.last) + 1
+            cell = Cell(column, column + _span(element) - 1, _visible_text(element),
+                        element.tag == "th")
+            placed.append(cell)
+            if _span(element, "rowspan") > 1:
+                later.append((replace(cell, carried=True), _span(element, "rowspan") - 1))
+            column = cell.last + 1
+        carry = [(cell, left - 1) for cell, left in carry if left > 1] + later
+        grids.append(sorted(placed, key=lambda c: c.first))
+    return grids
 
 
 def _label(cells: list[Cell]) -> str:
-    return cells[0][2] if cells and cells[0][0] == 0 else ""
+    return cells[0].text if cells and cells[0].first == 0 else ""
 
 
 def _is_value(text: str) -> bool:
-    # A year is a column label far more often than it is a figure.
-    return bool(_VALUE.fullmatch(text) or _SYMBOL.fullmatch(text)) and not _YEAR.fullmatch(text)
-
-
-_NOTE = re.compile(r"\(.+\)")  # a note about every row, such as "(in millions)"
+    # A year is a column label far more often than it is a figure. A sign on its own is not a
+    # figure either: filings use "$" and "%" as the sub-headers of a "Change" column.
+    return bool(_VALUE.fullmatch(text)) and not _YEAR.fullmatch(text)
 
 
 def _header_rows(rows: list[list[Cell]]) -> int:
     """How many leading rows are header rows.
 
     A row of <th> cells is a header row. So is a row that holds only a bracketed note. So is a row
-    with no figure in it, when its first cell is empty (filings put period labels in ordinary
-    cells above the figures) or when it is the first row with a label and another row follows it.
+    with no figure in it when its first cell is empty or a note, because filings put period
+    labels in ordinary cells above the figures. A row with a label and no figure is a header row
+    when it is the first row that names columns and another row follows, or when every other cell
+    in it is a short period label, as in "June 30, | 2026 | 2025".
     """
-    count, labelled = 0, False
+    count, columns_named, named_seen, titles = 0, False, False, 0
     for position, cells in enumerate(rows):
-        filled = [c for c in cells if c[2]]
-        others = [c for c in filled if c[0] != 0]
-        note = not others and bool(_NOTE.fullmatch(_label(cells)))
-        th_row = all(c[3] for c in filled)
-        plain = bool(others) and not any(_is_value(c[2]) for c in others)
-        first_labelled = bool(_label(cells)) and not labelled and position + 1 < len(rows)
-        if not (th_row or note or (plain and (not _label(cells) or first_labelled))):
+        own = [c for c in cells if c.text and not c.carried]
+        others = [c for c in own if c.first != 0]
+        label = next((c.text for c in own if c.first == 0), "")
+        named = bool(label) and not _NOTE.fullmatch(label)
+        plain = bool(others) and not any(_is_value(c.text) for c in others)
+        periods = all(len(c.text) <= 40 and _YEAR.search(c.text) for c in others)
+        # Column names are short. A first row of long text belongs to a table with no header row.
+        first_names = not columns_named and position + 1 < len(rows) and all(len(c.text) <= 120 for c in others)
+        # Below a row of group headers, one row may name the columns, as in "Exhibit Number |
+        # Exhibit Description | Form". Such names are short and hold no digits, which a row of
+        # text data below the header rows does not.
+        second_names = columns_named and not named_seen and all(
+            len(c.text) <= 40 and not re.search(r"\d", c.text) for c in others)
+        if not others and named and not columns_named:
+            titles += 1  # a title above the header rows, if header rows do follow
+        elif not ((bool(own) and all(c.th for c in own)) or (not others and bool(label) and not named)
+                  or (plain and (not named or periods or first_names or second_names))):
             break
-        labelled = labelled or (bool(_label(cells)) and not note)
+        columns_named = columns_named or bool(others)
+        named_seen = named_seen or (named and bool(others))
         count += 1
-    return count
+    # Rows with only a label and no header row after them are section headings, which are data.
+    return count if columns_named or count > titles else 0
 
 
-def _values(cells: list[Cell]) -> list[tuple[int, str]]:
-    """The non-empty cells after the label as (column, text).
+def _row_label(cells: list[Cell]) -> Cell | None:
+    """The cell that names a data row: the one in the first column, or, when that is empty, the
+    first text cell, because some filings indent a label with an empty leading cell."""
+    filled = [c for c in cells if c.text]
+    if filled and (filled[0].first == 0 or (len(filled) > 1 and not _is_value(filled[0].text)
+                                            and not _SYMBOL.fullmatch(filled[0].text)
+                                            and not _DASH.fullmatch(filled[0].text))):
+        return filled[0]
+    return None
+
+
+def _values(cells: list[Cell], label: Cell | None) -> list[tuple[int, int, str]]:
+    """The non-empty cells other than the label as (first column, last column, text).
 
     Filings put a currency sign, the number, and a percent sign or closing bracket in cells of
-    their own. The signs are joined to their number, and the value keeps the number's column.
+    their own. The signs are joined to their number, and the value keeps the number's columns. A
+    dash in its own cell directly between two numbers joins them into one range.
     """
+    filled = [c for c in cells if c.text and c is not label]
+    # Each value: the number's first and last column, its text, and the last column of any sign
+    # after it. The header is looked up over the number's columns only, because a closing sign
+    # often sits in a padding column under the next header.
     values: list[list] = []
-    sign = ""
-    for first, _, text, _ in cells:
-        if not text or first == 0:
-            continue
-        if _SYMBOL.fullmatch(text):
-            sign = text
-        elif _CLOSER.fullmatch(text) and values:
-            values[-1][1] += text
+    sign, joining = "", False
+    for position, cell in enumerate(filled):
+        following = filled[position + 1] if position + 1 < len(filled) else None
+        if _SYMBOL.fullmatch(cell.text):
+            sign = cell.text
+        elif _CLOSER.fullmatch(cell.text) and values:
+            values[-1][2] += cell.text
+            values[-1][3] = cell.last
+        elif (_DASH.fullmatch(cell.text) and values and following is not None
+              and values[-1][3] == cell.first - 1 and following.first == cell.last + 1
+              and (_is_value(following.text) or _YEAR.fullmatch(following.text))):
+            # A dash with nothing beside it is a nil figure, so only a dash between two
+            # adjoining numbers is a range.
+            values[-1][2] += f" {cell.text} "
+            joining = True
+        elif joining:
+            values[-1][2] += sign + cell.text
+            values[-1][3], sign, joining = cell.last, "", False
         else:
-            values.append([first, sign + text])
+            values.append([cell.first, cell.last, sign + cell.text, cell.last])
             sign = ""
-    return [(column, text) for column, text in values]
+    return [(first, last, text) for first, last, text, _ in values]
 
 
 def _table_rows(table) -> list[tuple[str, TableRow]]:
     caption = table.find("./caption")
     caption_text = _visible_text(caption) if caption is not None else None
     # Rows of a nested table belong to that table, which is visited on its own.
-    rows = [_grid(r) for r in table.iter("tr") if next(r.iterancestors("table")) is table]
-    rows = [cells for cells in rows if any(c[2] for c in cells)]  # drops empty sizing rows
+    rows = _grids([r for r in table.iter("tr") if next(r.iterancestors("table")) is table])
+    rows = [cells for cells in rows if any(c.text and not c.carried for c in cells)]  # drops sizing rows
     split = _header_rows(rows)
     headers = rows[:split]
 
-    def heading(column: int) -> str:
+    def column_labels(cells: list[Cell]) -> list[Cell]:
+        # "Year Ended June 30," beside the years 2026 and 2025 is the first half of each date. The
+        # trailing comma is what shows the label is an unfinished date and not a column name.
+        label = _label(cells)
+        others = [c for c in cells if c.first != 0 and c.text and not _NOTE.fullmatch(c.text)]
+        if label.endswith(",") and others and all(_YEAR.fullmatch(c.text) for c in others):
+            return [replace(c, text=f"{label} {c.text}") for c in others]
+        return others
+
+    labels = [column_labels(cells) for cells in headers]
+
+    def heading(first: int, last: int) -> str:
         # Header rows are read top to bottom, so "Three Months Ended" comes before its date. A
-        # header cell that spans several columns labels each of them.
-        found = [c[2] for cells in headers for c in cells if c[0] <= column <= c[1] and c[2]]
+        # header cell labels every column it spans, and a wide value takes every header above it.
+        found = [c.text for row in labels for c in row if c.first <= last and first <= c.last]
         return " ".join(dict.fromkeys(found))
 
     if caption_text is None:
-        # A bracketed note in the label column of the header rows, such as "(in millions)",
-        # applies to every row, so it is kept with each of them. A column name is not.
-        notes = [_label(cells) for cells in headers if _NOTE.fullmatch(_label(cells))]
-        caption_text = " ".join(dict.fromkeys(notes)) or None
+        # Text in the header rows that applies to every row is kept with each of them: a bracketed
+        # note such as "(in millions)" wherever it sits, a title in a row of its own, or a period
+        # in the label column such as "Three Months Ended June 30, 2026". A column name is not.
+        kept = [c.text for cells in headers for c in cells
+                if c.text and not c.carried and (_NOTE.fullmatch(c.text) or (c.first == 0 and (
+                    _YEAR.search(c.text) or not any(o.text for o in cells if o.first != 0))))]
+        caption_text = " ".join(dict.fromkeys(kept)) or None
     result = []
     for cells in rows[split:]:
-        # The number's own column is looked up first, then the column of its currency sign.
-        pairs = [TableCell(header=heading(column) or heading(column - 1), text=text)
-                 for column, text in _values(cells)]
-        record = TableRow(caption=caption_text, row_label=_label(cells), cells=pairs)
+        label = _row_label(cells)
+        # The number's own columns are looked up first, then the column of its currency sign.
+        pairs = [TableCell(header=heading(first, last) or heading(first - 1, first - 1), text=text)
+                 for first, last, text in _values(cells, label)]
+        name = label.text if label else ""
+        record = TableRow(caption=caption_text, row_label=name, cells=pairs)
         # The row text keeps the label, headers, and units together so they are retrieved as one.
-        text = " | ".join(filter(None, [caption_text, _label(cells)]
+        text = " | ".join(filter(None, [caption_text, name]
                                  + [f"{p.header}: {p.text}" if p.header else p.text for p in pairs]))
         result.append((text, record))
     return result

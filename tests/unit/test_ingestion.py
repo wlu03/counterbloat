@@ -169,5 +169,90 @@ def test_a_units_note_in_a_row_of_its_own_does_not_hide_the_header_row_below_it(
             b"<tr><td>Year Ended June 30,</td><td></td><td>2026</td><td>2025</td></tr>"
             b"<tr><td>Revenue</td><td>$</td><td>305,453</td><td>281,724</td></tr>"
             b"<tr><td>Foreign currency</td><td>$</td><td>(13,653</td><td>)</td></tr></table>")
-    assert _texts(html) == ["(In millions) | Revenue | 2026: $305,453 | 2025: 281,724",
-                            "(In millions) | Foreign currency | 2026: $(13,653)"]
+    assert _texts(html) == [
+        "(In millions) | Revenue | Year Ended June 30, 2026: $305,453 | Year Ended June 30, 2025: 281,724",
+        "(In millions) | Foreign currency | Year Ended June 30, 2026: $(13,653)"]
+
+
+def test_signs_used_as_sub_headers_do_not_end_the_header_rows():
+    html = (b"<table><tr><td></td><td colspan='2'>Three Months Ended June 30,</td><td colspan='2'>Change</td></tr>"
+            b"<tr><td>(Dollars in millions)</td><td>2026</td><td>2025</td><td>$</td><td>%</td></tr>"
+            b"<tr><td>Automotive sales</td><td>16,866</td><td>13,567</td><td>3,299</td><td>24%</td></tr></table>")
+    assert _texts(html) == ["(Dollars in millions) | Automotive sales | Three Months Ended June 30, 2026: 16,866 | "
+                            "Three Months Ended June 30, 2025: 13,567 | Change $: 3,299 | Change %: 24%"]
+
+
+def test_a_note_that_spans_the_table_is_a_caption_and_not_part_of_each_header():
+    html = (b"<table><tr><td colspan='4'>(In millions)</td></tr>"
+            b"<tr><td>Year Ended June 30,</td><td>2026</td><td>2025</td><td>2024</td></tr>"
+            b"<tr><td>U.S.</td><td>103,591</td><td>69,212</td><td>62,886</td></tr></table>")
+    assert _texts(html) == ["(In millions) | U.S. | Year Ended June 30, 2026: 103,591 | "
+                            "Year Ended June 30, 2025: 69,212 | Year Ended June 30, 2024: 62,886"]
+
+
+def test_a_note_beside_the_column_names_does_not_hide_the_period_row_below():
+    html = (b"<table><tr><td>(In millions)</td><td>Gross Amount</td><td>Net Amount</td></tr>"
+            b"<tr><td>June 30,</td><td>2026</td><td>2026</td></tr>"
+            b"<tr><td>Marketing-related</td><td>16,506</td><td>11,816</td></tr></table>")
+    assert _texts(html) == ["(In millions) | Marketing-related | Gross Amount June 30, 2026: 16,506 | "
+                            "Net Amount June 30, 2026: 11,816"]
+
+
+def test_a_text_row_after_an_unlabelled_header_row_is_data():
+    html = (b"<table><tr><td></td><td>Exhibit</td><td>Location</td></tr>"
+            b"<tr><td>3.1</td><td>Restated Certificate of Incorporation, effective as of March 19, 2019</td>"
+            b"<td>Exhibit 3.1 to the Current Report on Form 8-K</td></tr>"
+            b"<tr><td>3.2</td><td>Certificate of Amendment</td><td>Exhibit 3.2 to the Form 8-K</td></tr></table>")
+    assert [t.split(" | ")[0] for t in _texts(html)] == ["3.1", "3.2"]
+
+
+def test_a_rowspan_in_the_header_keeps_the_sub_headers_in_their_columns():
+    html = (b"<table><tr><td rowspan='2'>Three Months Ended June 30, 2026</td><td rowspan='2'>Interests</td>"
+            b"<td colspan='2'>Common Stock</td><td rowspan='2'>Capital</td></tr>"
+            b"<tr><td>Shares</td><td>Amount</td></tr>"
+            b"<tr><td>Balance</td><td>57</td><td>3,755</td><td>3</td><td>44,299</td></tr></table>")
+    assert _texts(html) == ["Three Months Ended June 30, 2026 | Balance | Interests: 57 | Common Stock Shares: 3,755 | "
+                            "Common Stock Amount: 3 | Capital: 44,299"]
+
+
+def test_a_dash_between_two_adjoining_numbers_is_a_range_and_a_dash_alone_is_a_value():
+    html = (b"<table><tr><td></td><td colspan='3'>Stated Rate</td><td>2026</td></tr>"
+            b"<tr><td>2013 issuance</td><td>3.75%</td><td>\xe2\x80\x93</td><td>4.88%</td><td>314</td></tr>"
+            b"<tr><td>Corporate</td><td></td><td>\xe2\x80\x94</td><td></td><td>12</td></tr></table>")
+    assert _texts(html) == ["2013 issuance | Stated Rate: 3.75% – 4.88% | 2026: 314",
+                            "Corporate | Stated Rate: — | 2026: 12"]
+    years = (b"<table><tr><td></td><td colspan='3'>Maturities</td></tr>"
+             b"<tr><td>2013 issuance</td><td>2028</td><td>\xe2\x80\x93</td><td>2033</td></tr></table>")
+    assert _texts(years) == ["2013 issuance | Maturities: 2028 – 2033"]
+
+
+def test_a_title_row_a_note_among_the_columns_and_an_indented_label_are_read_as_a_person_reads_them():
+    html = (b"<table><tr><td>Revenue by segment</td><td></td><td></td><td></td></tr>"
+            b"<tr><td></td><td></td><td colspan='2'>(In millions)</td></tr>"
+            b"<tr><td></td><td></td><td>2026</td><td>2025</td></tr>"
+            b"<tr><td></td><td>Cloud</td><td>120</td><td>100</td></tr></table>")
+    assert _texts(html) == ["Revenue by segment (In millions) | Cloud | 2026: 120 | 2025: 100"]
+
+
+def test_a_value_wider_than_its_header_still_gets_it_and_a_prose_table_has_no_header_row():
+    wide = (b"<table><tr><td></td><td></td><td>2026</td></tr>"
+            b"<tr><td>Total</td><td colspan='2'>75,712</td></tr></table>")
+    assert _texts(wide) == ["Total | 2026: 75,712"]
+    prose = (b"<table><tr><td>Azure</td><td>A cloud platform that provides developers and enterprises with"
+             b" compute, networking, storage, and other services across many regions.</td></tr>"
+             b"<tr><td>Dynamics</td><td>Business applications.</td></tr></table>")
+    assert [t.split(" | ")[0] for t in _texts(prose)] == ["Azure", "Dynamics"]
+    headings = b"<table><tr><td>Net sales:</td><td></td></tr><tr><td>Products</td><td>66,613</td></tr></table>"
+    assert _texts(headings) == ["Net sales:", "Products | 66,613"]
+
+
+def test_a_row_of_column_names_below_a_row_of_group_headers_is_a_header_row():
+    html = (b"<table><tr><td></td><td></td><td colspan='2'>Incorporated by Reference</td></tr>"
+            b"<tr><td>Exhibit Number</td><td>Exhibit Description</td><td>Form</td><td>Filing Date</td></tr>"
+            b"<tr><td>4.6</td><td>Officer's Certificate, dated as of February 9, 2015</td><td>8-K</td><td>2/9/15</td></tr></table>")
+    assert _texts(html) == ["4.6 | Exhibit Description: Officer's Certificate, dated as of February 9, 2015 | "
+                            "Incorporated by Reference Form: 8-K | Incorporated by Reference Filing Date: 2/9/15"]
+    long_names = (b"<table><tr><td>Periods</td><td>Approximate Dollar Value of Shares That May Yet Be Purchased"
+                  b" Under the Plans or Programs (1)</td></tr><tr><td>Total</td><td>$99,779</td></tr></table>")
+    assert _texts(long_names) == ["Total | Approximate Dollar Value of Shares That May Yet Be Purchased Under the "
+                                  "Plans or Programs (1): $99,779"]

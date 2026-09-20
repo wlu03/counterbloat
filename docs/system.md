@@ -68,8 +68,15 @@ Countercheck follows `Countercheck_Complete_System.md`. This file maps the speci
   characters at sentence ends. It does not read tables or bounding boxes. A page with no
   text layer is read by an OpenAI vision call and the document gets the `ocr_text` flag. Without
   OpenAI, or for a PDF sent as `content` (JSON cannot carry its bytes), it gets `no_text_layer`.
-- The first row of an HTML table is treated as its header row. A table with no header row loses
-  its first data row.
+- HTML tables are read on a column grid that follows `colspan` and `rowspan`. Header rows are
+  found by content: `<th>` rows, bracketed notes, title rows, and rows without figures above the
+  data, which is how filings write period labels. A currency sign, a percent sign, a closing
+  bracket, or a range dash in a cell of its own is joined to its number. Checked against four
+  filings (Apple, Disney, and Microsoft 10-K, Tesla 10-Q): every number has a column label in 94%
+  to 100% of the rows that hold numbers. Known limits: a table whose header is in a separate
+  `<table>` above it keeps its figures without labels, because borrowing labels could attach a
+  wrong period; a table with no label column loses the header of its first column; a header
+  row is recognised by rules of thumb (length, digits, years), which other layouts can defeat.
 - Authentication is one shared API key. There are no users or tenants.
 - The run manifest records the commit, the updater, model identifiers, the prompt and checklist
   versions, the configuration hash, the cutoff, OpenAI, Jev, and Token Company calls with token
