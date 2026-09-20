@@ -110,7 +110,7 @@ def run_workflow(call_id: str, store, deps, span_limit: int = 12) -> dict:
     speakers = transcript.speakers_in_prepared(sentences)
     _, spans = transcript.spans(sentences)
     turns = transcript.turns(sentences)
-    chosen = company_spans(spans, sentences, speakers, min_chars=100)[:span_limit]
+    chosen = company_spans(spans, sentences, speakers, min_chars=100, limit=span_limit)
 
     manifest = RunManifest(analysis_id=call_id, mode=Mode.live, config_hash="workflow")
     llm = deps.llm_factory(manifest)

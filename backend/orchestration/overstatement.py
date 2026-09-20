@@ -150,13 +150,18 @@ def as_dicts(rows: list[Row]) -> list[dict]:
 
 
 def company_spans(spans: list[SourceSpan], sentences: list[Sentence], speakers: set[str],
-                  min_chars: int = 0) -> list[SourceSpan]:
+                  min_chars: int = 0, limit: int | None = None) -> list[SourceSpan]:
     """Passages spoken by the company's own people.
 
     `min_chars` drops short sentences before anything is paid for. It is blunt: on one call it
     removed a third of the passages that a router judged to be assertions, among them short
     statements such as a claim of improved profitability. Leave it at zero when a router is
     available to make that decision on meaning instead.
+
+    `limit` draws evenly from the prepared remarks and the answers. Taking the first passages
+    instead would read only the opening of the call, because prepared remarks come first and on
+    one call filled the first thirty-seven eligible passages. The answers are the half of a call
+    nobody scripted, so a run that never reaches them measures only the scripted half.
     """
     by_index = {s.index: s for s in sentences}
     chosen = []
@@ -165,8 +170,20 @@ def company_spans(spans: list[SourceSpan], sentences: list[Sentence], speakers: 
         if sentence is None or sentence.speaker not in speakers:
             continue
         if len(span.text) >= min_chars:
-            chosen.append(span)
-    return chosen
+            chosen.append((sentence.segment, span))
+    if limit is None:
+        return [span for _, span in chosen]
+    segments: dict[str, list[SourceSpan]] = {}
+    for segment, span in chosen:
+        segments.setdefault(segment, []).append(span)
+    taken: list[SourceSpan] = []
+    # Round by round, one passage from each segment, so a small limit still reaches the answers.
+    for i in range(max((len(v) for v in segments.values()), default=0)):
+        for segment in sorted(segments):
+            if i < len(segments[segment]) and len(taken) < limit:
+                taken.append(segments[segment][i])
+    order = {span.id: n for n, (_, span) in enumerate(chosen)}
+    return sorted(taken, key=lambda span: order[span.id])
 
 
 def claims_for_call(spans: list[SourceSpan], llm, manifest: RunManifest, router=None,

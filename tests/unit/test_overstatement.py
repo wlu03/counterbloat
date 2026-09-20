@@ -221,3 +221,38 @@ def test_without_a_scorer_no_probability_is_invented(monkeypatch):
                                 segment="prepared", cik="0000012345", sections=SECTIONS,
                                 accession="a")
     assert row.probability is None and row.probability_basis == []
+
+
+def _two_segment_call():
+    from backend.ingestion.transcript import PREPARED, QA, Sentence
+    sentences, spans = [], []
+    for i in range(10):
+        segment = PREPARED if i < 6 else QA
+        text = f"Passage {i} says something substantive about the quarter just ended."
+        sentences.append(Sentence(call_id="c", index=i, text=text, speaker="P1",
+                                  segment=segment, features={}))
+        spans.append(_span(i, text).model_copy(update={"id": f"call:{i}"}))
+    return spans, sentences
+
+
+def test_a_limit_reaches_the_answers_and_not_only_the_opening():
+    from backend.ingestion.transcript import PREPARED, QA
+    spans, sentences = _two_segment_call()
+    by_id = {f"call:{s.index}": s.segment for s in sentences}
+    chosen = overstatement.company_spans(spans, sentences, {"P1"}, limit=4)
+    segments = [by_id[s.id] for s in chosen]
+    assert len(chosen) == 4
+    assert PREPARED in segments and QA in segments
+    # Whatever is chosen is still read in the order it was said.
+    assert [s.id for s in chosen] == sorted(chosen, key=lambda s: int(s.id.split(":")[1]))[0:4] \
+        or all(int(a.id.split(":")[1]) < int(b.id.split(":")[1]) for a, b in zip(chosen, chosen[1:]))
+
+
+def test_without_a_limit_every_eligible_passage_is_returned():
+    spans, sentences = _two_segment_call()
+    assert len(overstatement.company_spans(spans, sentences, {"P1"})) == 10
+
+
+def test_a_limit_larger_than_the_call_returns_everything():
+    spans, sentences = _two_segment_call()
+    assert len(overstatement.company_spans(spans, sentences, {"P1"}, limit=99)) == 10
