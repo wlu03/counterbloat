@@ -119,7 +119,8 @@ def row_for(claim: Claim, *, speaker: str | None, segment: str, cik: str,
             hedging = hedging_delta(turn or claim.text, matches[0].quote)
         except LexiconMissing:
             hedging = None
-    axes = assess(claim, [check.stance], hedging)
+    # Every agent that took a side, not just the one that reads filed figures.
+    axes = assess(claim, [e.get("stance", "") for e in evidence], hedging)
     return Row(
         claim_id=claim.id, claim=claim.text, speaker=speaker, segment=segment,
         claim_type=str(claim.assertion_type), specificity=specificity_score(claim),

@@ -51,7 +51,10 @@ def evidence_gap(stances: list[str], hedging: float | None = None
     there is nothing to divide by, and the answer is None rather than zero, because no evidence
     against a claim is not evidence for it.
     """
-    looked = [s for s in stances if s != NOT_FOUND]
+    # Only a stance that took a side divides the measure. An agent that looked and found a
+    # passage bearing neither way has said nothing about whether the claim holds, and counting it
+    # as if it did would dilute a contradiction with the mere fact that someone searched.
+    looked = [s for s in stances if s in (SUPPORTS, CONTRADICTS)]
     parts: dict[str, float] = {}
     if looked:
         parts["contradicted_share"] = sum(1 for s in looked if s == CONTRADICTS) / len(looked)

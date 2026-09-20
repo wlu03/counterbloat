@@ -54,3 +54,14 @@ def test_the_two_axes_are_reported_apart():
     result = assess(VAGUE, [SUPPORTS])
     # Loud wording, and nothing disagreeing with it. Puffery is not a finding.
     assert result.rhetorical_inflation == 1.0 and result.evidence_gap == 0.0
+
+
+def test_an_agent_that_took_no_side_does_not_dilute_a_contradiction():
+    # One filed figure disagrees; three matched passages bear neither way.
+    gap, parts, checked = evidence_gap([CONTRADICTS, "neutral", "neutral", "context"])
+    assert checked == 1 and gap == 1.0 and parts["contradicted_share"] == 1.0
+
+
+def test_agents_that_all_took_no_side_leave_nothing_to_divide():
+    gap, parts, checked = evidence_gap(["neutral", "context", NOT_FOUND])
+    assert gap is None and checked == 0
