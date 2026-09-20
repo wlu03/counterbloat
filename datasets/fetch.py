@@ -22,7 +22,7 @@ MAEC_REPO = ("Earnings-Call-Dataset/"
              "Prediction")
 
 # Read sentence by sentence rather than split into labelled examples, so they have no adapter.
-CORPORA = {"maec", "mdrm"}
+CORPORA = {"maec", "mdrm", "loughran_mcdonald"}
 
 SOURCES = {
     "quantemp": {
@@ -69,6 +69,16 @@ SOURCES = {
                 CODELOAD.format(repo="GeminiLn/EarningsCall_Dataset",
                                 commit="e168672f60c9adab38cd3004048e4af656e79f24"),
                 "1214d122504743183f8798b6047b9242c6463c00c927faef9cdd842b84e8c9c2"),
+        },
+    },
+    "loughran_mcdonald": {
+        "page": "https://sraf.nd.edu/loughranmcdonald-master-dictionary/",
+        "license": "free for academic use; commercial use needs the authors' permission",
+        "files": {
+            "lm_master_dictionary.csv": (
+                "https://drive.google.com/uc?export=download&id="
+                "1iq2RUf8qGFEAk1g8wQntP3habOnR3fXF",
+                "e2d1328682bab7d2187684fb9f5420bb730401c9eefc00daf835edd203f4859d"),
         },
     },
     "climate_fever": {
