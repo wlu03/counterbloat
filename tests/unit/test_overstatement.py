@@ -91,3 +91,21 @@ def test_the_word_measures_read_the_whole_turn_not_one_sentence(monkeypatch):
                           cik="0000012345", sections=SECTIONS, accession="a",
                           turn="Demand is strong. We will always deliver on that.")
     assert "We will always deliver" in seen["text"]
+
+
+def test_a_later_restatement_is_added_as_context_without_changing_the_verdict(monkeypatch):
+    from backend.ingestion.labels import Event
+    monkeypatch.setattr(overstatement.xbrl, "verify",
+                        lambda c, cik, period=None: xbrl.Check(c.id, xbrl.SUPPORTS, tag="Revenues",
+                                                               accession="a", note="stub"))
+    monkeypatch.setattr(overstatement, "hedging_delta", lambda a, b: 0.0)
+    monkeypatch.setattr(overstatement.outcomes, "events",
+                        lambda cik, item: [Event(cik=cik, item="4.02", filed_at="2015-09-10",
+                                                 accession="r-1")])
+    row = overstatement.row_for(_claim("Revenue was $76.1 million."), speaker="Person1",
+                                segment="prepared", cik="0000012345", sections=SECTIONS,
+                                accession="a", call_date="2015-04-22")
+    later = [e for e in row.evidence if e["agent"] == "outcome-checker"]
+    assert later and later[0]["stance"] == "context" and later[0]["months_after"] == 5
+    # A restatement months later does not turn a confirmed figure into a contradicted one.
+    assert row.verdict == overstatement.CONSISTENT
