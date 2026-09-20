@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -121,7 +122,8 @@ def verify(row: dict, llm_factory: Callable, searchable: dict[str, list[dict]],
             status = "not_run"
         manifest.embedding_search = getattr(index, "used_embeddings", None)
     else:
-        store.put("analyses", "run", {"id": "run", "document_id": document.id,
+        # The dataset supplies the claim, so both arms are given it and neither has to find it.
+        store.put("analyses", "run", {"id": "run", "document_id": document.id, "claim_text": text,
                                       "status": "queued"}, document_id=document.id)
         run_analysis("run", deps)
         manifest = RunManifest.model_validate(store.get("manifests", "run"))
@@ -189,8 +191,15 @@ def score(predictions: list[dict], gold: list[dict], task: VerificationTask | No
     return result
 
 
-def _read(path: str, limit: int | None = None) -> list[dict]:
+def _read(path: str, limit: int | None = None, seed: int | None = None) -> list[dict]:
+    """The rows of a file. With a seed, a random sample of `limit` rows instead of the first ones.
+
+    A published file is rarely in a random order, so the first rows can hold one class more often
+    than the whole file does. The seed is written to the run's meta file.
+    """
     rows = list(read_rows(path))
+    if seed is not None and limit and limit < len(rows):
+        return random.Random(seed).sample(rows, limit)
     return rows[:limit] if limit else rows
 
 
@@ -208,6 +217,7 @@ def main() -> None:
     parser.add_argument("--updater", choices=["linguistic", "full_context", "evidence_accumulator"])
     parser.add_argument("--jev", action="store_true")
     parser.add_argument("--limit", type=int, default=2000)
+    parser.add_argument("--seed", type=int, help="take a random sample of --limit rows, not the first")
     parser.add_argument("--max-calls", type=int, default=50000)
     parser.add_argument("--prices")
     args = parser.parse_args()
@@ -251,9 +261,9 @@ def main() -> None:
     out.with_suffix(".meta.json").write_text(json.dumps({
         "command": args.command, "system": args.system, "jev": bool(router),
         "commit": current_commit(), "config": settings.config_hash(),
-        "max_calls": args.max_calls, "limit": args.limit}, indent=2))
+        "max_calls": args.max_calls, "limit": args.limit, "seed": args.seed}, indent=2))
     with out.open("w", encoding="utf-8") as handle:
-        for prediction in run_rows(_read(args.visible, args.limit), one, OpenAILLM, args.max_calls):
+        for prediction in run_rows(_read(args.visible, args.limit, args.seed), one, OpenAILLM, args.max_calls):
             handle.write(json.dumps(prediction, default=str) + "\n")
 
 if __name__ == "__main__":

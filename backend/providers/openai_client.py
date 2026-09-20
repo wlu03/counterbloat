@@ -77,6 +77,10 @@ class OpenAILLM:
         return self._parse("extract", self.extract_model, prompts.EXTRACTOR, payload,
                            ClaimDrafts).claims
 
+    def structure_claim(self, text: str, span: SourceSpan) -> ClaimDraft:
+        payload = {"claim": text, "passage": span.text}
+        return self._parse("structure", self.extract_model, prompts.STRUCTURER, payload, ClaimDraft)
+
     def plan_questions(self, claim: Claim, checklist: list[str]) -> list[QuestionDraft]:
         payload = {"claim": claim.model_dump(mode="json"), "checklist": checklist}
         return self._parse("plan", self.reason_model, prompts.PLANNER, payload,

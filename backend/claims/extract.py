@@ -25,6 +25,39 @@ def valid(draft: ClaimDraft, span: SourceSpan) -> bool:
     return True
 
 
+def _build(draft: ClaimDraft, span: SourceSpan, claim_id: str) -> Claim:
+    start = span.start + span.text.index(draft.quote)
+    return Claim(id=claim_id, document_id=span.document_id, span_id=span.id, text=draft.quote,
+                 start=start, end=start + len(draft.quote), **draft.model_dump(exclude={"quote"}))
+
+
+def structure(text: str, spans: list[SourceSpan], llm: LLM, manifest: RunManifest,
+              id_prefix: str = "") -> list[Claim]:
+    """Read the structured fields of a claim the caller supplied, rather than deciding whether the
+    document makes one.
+
+    The claim must be a verbatim quote of one passage, so the finding can point at where it is
+    written. The extractor's job is to find claims worth checking in a document, and it declines
+    a general statement of fact. A claim a person or a dataset handed over has already been chosen.
+    """
+    span = next((s for s in spans if text in s.text), None)
+    if span is None:
+        manifest.rejections.append("the supplied claim is not a verbatim quote of any passage")
+        return []
+    try:
+        draft = llm.structure_claim(text, span)
+    except ProviderError as exc:
+        manifest.errors.append(str(exc))
+        return []
+    # The model may only read the fields of the supplied wording, so its quote is that wording.
+    draft.quote = text
+    if not valid(draft, span):
+        manifest.rejections.append("the structured fields of the supplied claim state a number "
+                                   "that its wording does not")
+        return []
+    return [_build(draft, span, f"{id_prefix}{span.id}-c0")]
+
+
 def extract(spans: list[SourceSpan], llm: LLM, router: Router | None, manifest: RunManifest,
             selected_span_ids: set[str] | None = None, id_prefix: str = "") -> list[Claim]:
     selected = selected_span_ids or set()
@@ -60,9 +93,5 @@ def extract(spans: list[SourceSpan], llm: LLM, router: Router | None, manifest: 
             if draft.quote in seen:
                 continue  # The same wording returned twice is one claim, not two.
             seen.add(draft.quote)
-            start = span.start + span.text.index(draft.quote)
-            claims.append(Claim(
-                id=f"{id_prefix}{span.id}-c{len(claims)}", document_id=span.document_id, span_id=span.id,
-                text=draft.quote, start=start, end=start + len(draft.quote),
-                **draft.model_dump(exclude={"quote"})))
+            claims.append(_build(draft, span, f"{id_prefix}{span.id}-c{len(claims)}"))
     return claims

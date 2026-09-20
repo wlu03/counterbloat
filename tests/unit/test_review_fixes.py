@@ -137,3 +137,49 @@ def test_summary_with_numbers_no_calculation_produced_is_replaced():
     state, spans = _state_with_context()
     finding = finalize(state, spans, _Inventing(), run_review(state, spans, _Inventing()))
     assert "10,000" not in finding.summary and finding.summary.startswith("Assessment:")
+
+
+def test_a_supplied_claim_is_read_rather_than_searched_for(store):
+    from backend.claims.extract import structure
+    from backend.models import Mode, RunManifest, SourceSpan
+    from backend.providers.base import ClaimDraft, ProviderError
+    from tests.fakes import FakeLLM
+
+    span = SourceSpan(id="s1", document_id="d", kind="paragraph", start=10, end=60,
+                      text="Everybody knows that the Pacific island of Tuvalu is sinking.")
+    manifest = RunManifest(analysis_id="a", mode=Mode.frozen, config_hash="")
+
+    class Refusing(FakeLLM):
+        def extract_claims(self, span, context):
+            return []  # the extractor declines a general statement of fact
+
+        def structure_claim(self, text, span):
+            return ClaimDraft(quote=text, assertion_type="capability", subject="Tuvalu",
+                              assertion="is sinking", metric=None, value=None, unit=None,
+                              denominator=None, population=None, boundary=None, period=None,
+                              qualifications=[])
+
+    [claim] = structure("the Pacific island of Tuvalu is sinking", [span], Refusing(), manifest)
+    assert claim.text == "the Pacific island of Tuvalu is sinking" and claim.span_id == "s1"
+    assert claim.start == 10 + span.text.index(claim.text) and claim.id.endswith("s1-c0")
+
+    # A claim that is not in any passage cannot be pointed at, and a number the wording does not
+    # state cannot come from it.
+    assert structure("a sentence from somewhere else", [span], Refusing(), manifest) == []
+    assert "not a verbatim quote" in manifest.rejections[0]
+
+    class Inventing(FakeLLM):
+        def structure_claim(self, text, span):
+            return ClaimDraft(quote=text, assertion_type="capability", subject=None, assertion=None,
+                              metric=None, value="40", unit="%", denominator=None, population=None,
+                              boundary=None, period=None, qualifications=[])
+
+    assert structure("the Pacific island of Tuvalu is sinking", [span], Inventing(), manifest) == []
+    assert "state a number" in manifest.rejections[1]
+
+    class Broken(FakeLLM):
+        def structure_claim(self, text, span):
+            raise ProviderError("openai structure failed: 503")
+
+    assert structure("the Pacific island of Tuvalu is sinking", [span], Broken(), manifest) == []
+    assert "503" in manifest.errors[0]

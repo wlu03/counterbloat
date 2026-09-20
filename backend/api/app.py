@@ -36,6 +36,9 @@ class AnalysisRequest(BaseModel):
     mode: Mode | None = None
     cutoff: AwareDatetime | None = None
     selected_span_ids: list[str] = []
+    # Check this one claim, which must be a verbatim quote of a passage, instead of searching the
+    # document for claims worth checking.
+    claim_text: str | None = None
     # Run the code of a repository that the document links to, in one paid Devin session.
     replicate: bool = False
 
@@ -138,7 +141,8 @@ def create_app(deps: Deps | None = None) -> FastAPI:
                 return existing[0]
         job = {"id": f"an-{uuid.uuid4().hex[:12]}", "document_id": request.document_id,
                "mode": request.mode, "cutoff": request.cutoff.isoformat() if request.cutoff else None,
-               "selected_span_ids": request.selected_span_ids, "status": "queued",
+               "selected_span_ids": request.selected_span_ids, "claim_text": request.claim_text,
+               "status": "queued",
                "replicate": request.replicate, "created_at": datetime.now(UTC).isoformat(),
                "idempotency_key": idempotency_key, "cancel_requested": False}
         d.store.put("analyses", job["id"], job, document_id=request.document_id,

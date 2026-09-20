@@ -10,7 +10,7 @@ from backend.assessment.review import finalize, numbers_supported, run_review
 from backend.belief.priority import choose, critical_open
 from backend.belief import strategies
 from backend.belief.state import apply_answers
-from backend.claims.extract import extract
+from backend.claims.extract import extract, structure
 from backend.compression.protect import build_context
 from backend.config import Settings
 from backend.db import Store
@@ -283,8 +283,12 @@ def run_analysis(analysis_id: str, deps: Deps) -> None:
         manifest.models["checklists"] = checklists.VERSION
         spans = store.find("spans", SourceSpan, document_id=job["document_id"])
         router = deps.router if deps.settings.optimization.jev_routing else None
-        claims = extract(spans, llm, router, manifest, set(job.get("selected_span_ids") or []),
-                         id_prefix=f"{analysis_id}-")
+        if job.get("claim_text"):
+            # The claim was supplied, so it is read rather than searched for.
+            claims = structure(job["claim_text"], spans, llm, manifest, f"{analysis_id}-")
+        else:
+            claims = extract(spans, llm, router, manifest, set(job.get("selected_span_ids") or []),
+                             id_prefix=f"{analysis_id}-")
         if job.get("replicate") and claims:
             # Asked for by this analysis only. The report is in the corpus before any claim is
             # investigated, so every claim can cite it.

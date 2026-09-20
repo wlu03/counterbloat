@@ -140,3 +140,15 @@ def test_climate_fever_and_quantemp_are_scored_on_their_own_label_fields():
     assert score([prediction("insufficient")], [{"id": "x", "label": "True"}], quantemp)["status_agreement"] == 0.0
     assert quantemp.target(Claim(id="c", document_id="d", span_id="s", text="t", start=0, end=1,
                                  assertion_type=AssertionType.numerical_comparison), None).id == "quantemp-false"
+
+
+def test_a_seed_samples_rows_instead_of_taking_the_first_ones(tmp_path):
+    from evaluation.experiments.run import _read
+
+    source = tmp_path / "rows.jsonl"
+    source.write_text("\n".join(json.dumps({"id": i}) for i in range(100)))
+    assert [r["id"] for r in _read(source, 5)] == [0, 1, 2, 3, 4]
+    sampled = [r["id"] for r in _read(source, 5, seed=7)]
+    assert sampled != [0, 1, 2, 3, 4] and len(set(sampled)) == 5
+    assert sampled == [r["id"] for r in _read(source, 5, seed=7)]      # the same seed, the same rows
+    assert len(_read(source, 500, seed=7)) == 100                      # a sample larger than the file

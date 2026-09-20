@@ -32,6 +32,15 @@ def _judgment(span_id, quote, relationship, target="claim", denominator=None, re
                             origin="company_reported", repeats_span_id=repeats, limitations=[])
 
 
+def claim_draft(quote):
+    """The structured fields of the fictional emissions claim."""
+    return ClaimDraft(quote=quote, assertion_type="numerical_comparison",
+                      subject="Example Manufacturing", assertion="reduced",
+                      metric="total operational emissions", value="40", unit="%",
+                      denominator=None, population=None, boundary=None,
+                      period="2025 compared with 2024", qualifications=[])
+
+
 class FakeLLM:
     def __init__(self, manifest=None):
         self.analyze_calls = 0
@@ -39,11 +48,11 @@ class FakeLLM:
     def extract_claims(self, span, context):
         if "total operational emissions" not in span.text:
             return []
-        return [ClaimDraft(quote=span.text, assertion_type="numerical_comparison",
-                           subject="Example Manufacturing", assertion="reduced",
-                           metric="total operational emissions", value="40", unit="%",
-                           denominator=None, population=None, boundary=None,
-                           period="2025 compared with 2024", qualifications=[])]
+        return [claim_draft(span.text)]
+
+    def structure_claim(self, text, span):
+        # A supplied claim is read, so the fields do not depend on the extractor finding it.
+        return claim_draft(text)
 
     def plan_questions(self, claim, checklist):
         return []
