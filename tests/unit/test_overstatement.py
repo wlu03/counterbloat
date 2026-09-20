@@ -169,3 +169,28 @@ def test_drift_still_reads_wording_the_filing_carried_over(monkeypatch):
     moved = [e for e in row.evidence if e["agent"] == "drift-tracker"]
     assert moved and moved[0]["similarity"] >= 0.6
     assert all("regulator" in e["quote"] for e in matched)
+
+
+def _sentence(index, speaker, text):
+    from backend.ingestion.transcript import PREPARED, Sentence
+    return Sentence(call_id="c", index=index, text=text, speaker=speaker, segment=PREPARED,
+                    features={})
+
+
+def test_only_the_companys_own_passages_are_chosen():
+    sentences = [_sentence(0, "Person1", "Revenue rose."), _sentence(1, "Analyst", "Why?")]
+    spans = [_span(0, "Revenue rose."), _span(1, "Why?")]
+    spans = [s.model_copy(update={"id": f"call:{i}"}) for i, s in enumerate(spans)]
+    chosen = overstatement.company_spans(spans, sentences, {"Person1"})
+    assert [s.id for s in chosen] == ["call:0"]
+
+
+def test_a_length_floor_drops_short_passages_and_zero_keeps_them():
+    sentences = [_sentence(0, "P1", "Strong profitability."),
+                 _sentence(1, "P1", "Revenue before reimbursements rose to seventy six million.")]
+    spans = [_span(0, "Strong profitability."),
+             _span(1, "Revenue before reimbursements rose to seventy six million.")]
+    spans = [s.model_copy(update={"id": f"call:{i}"}) for i, s in enumerate(spans)]
+    assert len(overstatement.company_spans(spans, sentences, {"P1"}, min_chars=0)) == 2
+    assert [s.id for s in overstatement.company_spans(spans, sentences, {"P1"}, min_chars=40)] \
+        == ["call:1"]

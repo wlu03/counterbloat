@@ -10,10 +10,12 @@ from dataclasses import asdict, dataclass, field
 from typing import Callable
 
 from backend.assessment.inflation import Axes, assess
+from backend.claims.extract import extract
 from backend.claims.features import puffery_density, specificity, specificity_score
 from backend.claims.lexicon import LexiconMissing, hedging_delta
 from backend.ingestion.sections import Section
-from backend.models import Claim
+from backend.ingestion.transcript import Sentence
+from backend.models import Claim, RunManifest, SourceSpan
 from backend.retrieval import drift, novelty, risk_matcher
 from backend.verification import outcomes, xbrl
 
@@ -130,3 +132,29 @@ def row_for(claim: Claim, *, speaker: str | None, segment: str, cik: str,
 
 def as_dicts(rows: list[Row]) -> list[dict]:
     return [asdict(r) for r in rows]
+
+
+def company_spans(spans: list[SourceSpan], sentences: list[Sentence], speakers: set[str],
+                  min_chars: int = 0) -> list[SourceSpan]:
+    """Passages spoken by the company's own people.
+
+    `min_chars` drops short sentences before anything is paid for. It is blunt: on one call it
+    removed a third of the passages that a router judged to be assertions, among them short
+    statements such as a claim of improved profitability. Leave it at zero when a router is
+    available to make that decision on meaning instead.
+    """
+    by_index = {s.index: s for s in sentences}
+    chosen = []
+    for span in spans:
+        sentence = by_index.get(int(span.id.rsplit(":", 1)[-1]))
+        if sentence is None or sentence.speaker not in speakers:
+            continue
+        if len(span.text) >= min_chars:
+            chosen.append(span)
+    return chosen
+
+
+def claims_for_call(spans: list[SourceSpan], llm, manifest: RunManifest, router=None,
+                    id_prefix: str = "") -> list[Claim]:
+    """Claims from the passages given, with a router deciding which are worth reading closely."""
+    return extract(spans, llm, router, manifest, id_prefix=id_prefix)
