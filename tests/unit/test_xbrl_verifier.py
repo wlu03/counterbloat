@@ -150,3 +150,16 @@ def test_an_amount_is_still_compared(monkeypatch):
     check = xbrl.verify(_claim(metric="revenue", value="$377.7 million", period="2015-Q1"),
                         "0000012345", period="2015-Q1")
     assert check.stance == xbrl.SUPPORTS
+
+
+@pytest.mark.parametrize("metric,text", [
+    ("Combined revenues of the acquired stores", "acquiring a Ford store with $160 million"),
+    ("operating cash flow", "operating cash flow, before changes in working capital, was $121m"),
+    ("same-store revenue", "same-store revenue reached $12 million"),
+])
+def test_part_of_the_company_is_not_checked_against_the_total(monkeypatch, metric, text):
+    _facts(monkeypatch, {"Revenues": [
+        {"end": "2015-03-31", "start": "2015-01-01", "val": 1_689_600_000, "accn": "x"}]})
+    check = xbrl.verify(_claim(metric=metric, text=text, value="$160 million", period="2015-Q1"),
+                        "0000012345", period="2015-Q1")
+    assert check.stance == xbrl.NOT_FOUND

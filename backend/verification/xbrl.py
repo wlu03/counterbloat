@@ -42,8 +42,12 @@ RATE = re.compile(r"%|\bper\s?cent|\bbasis\s+points?\b|\bbps\b|\bpercentage\b",
 # Wording that names a measure the company defined itself. It has no filed counterpart, so the
 # difference from the filed figure is a disclosure gap to report, never a contradiction.
 ADJUSTED = re.compile(r"\b(?:adjusted|non[- ]?gaap|underlying|organic|pro[- ]?forma"
-                      r"|normali[sz]ed|excluding|before\s+reimbursements?"
-                      r"|constant[- ]currency)", re.I)
+                      r"|normali[sz]ed|excluding|before\s+\w+|constant[- ]currency"
+                      r"|same[- ]store|comparable|like[- ]for[- ]like)", re.I)
+# Wording naming part of the company rather than the whole of it. A tag holds the total, so
+# it cannot answer a claim about one segment, store or product line.
+SUBSET = re.compile(r"\b(?:acquired|segment|division|store|region|product line|business unit"
+                    r"|brand)s?\b", re.I)
 # A claim about what will happen has nothing filed to check it against yet.
 FORWARD = {AssertionType.future_target, AssertionType.policy_commitment}
 # Days a stated period covers, so an annual figure cannot answer a quarterly claim.
@@ -153,6 +157,9 @@ def verify(claim: Claim, cik: str, period: str | None = None) -> Check:
     if ADJUSTED.search(wording):
         return Check(claim.id, NOT_FOUND,
                      note="claim names a company-defined measure with no filed counterpart")
+    if SUBSET.search(wording):
+        return Check(claim.id, NOT_FOUND,
+                     note="claim is about part of the company, which a filed total cannot answer")
     tags = tag_for(claim.metric)
     if not tags:
         return Check(claim.id, NOT_FOUND, note="metric wording is not in the tag table")
